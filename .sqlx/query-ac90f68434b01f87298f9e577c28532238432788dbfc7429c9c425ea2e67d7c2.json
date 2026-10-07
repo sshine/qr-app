@@ -1,0 +1,155 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO sheets\n            (id, code_count, base_url, preset, layout, handler_id, handler_config, note)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n        RETURNING id, created_at, code_count, base_url, preset, layout,\n                  handler_id, handler_config, note, pdf_key, pdf_expires_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "code_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "code_count"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "base_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "base_url"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "preset",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "preset"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "layout",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "layout"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "handler_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "handler_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "handler_config",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "handler_config"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "pdf_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "pdf_key"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "pdf_expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "pdf_expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ac90f68434b01f87298f9e577c28532238432788dbfc7429c9c425ea2e67d7c2"
+}

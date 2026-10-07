@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, sheet_id, secret_hash, intended_handler, intended_config,\n               created_at, first_seen_at, revoked_at\n        FROM codes WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "sheet_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "sheet_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "secret_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "secret_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "intended_handler",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "intended_handler"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "intended_config",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "intended_config"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "first_seen_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "first_seen_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "revoked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "codes",
+            "name": "revoked_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "5ceeb1e65f8fed0a905a68ed1571d54d98c5862765f27074e5583bad6145f39f"
+}

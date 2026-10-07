@@ -14,7 +14,7 @@ workspace = true
 [features]
 # A per-test database, created from migrations and dropped on Drop. Behind a feature
 # because it links sqlx's admin paths into anything that depends on it.
-testing = ["dep:tempfile"]
+testing = ["dep:tempfile", "tokio/rt"]
 
 [dependencies]
 async-trait = { workspace = true }

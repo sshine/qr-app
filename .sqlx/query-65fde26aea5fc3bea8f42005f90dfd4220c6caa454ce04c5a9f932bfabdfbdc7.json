@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sheets SET pdf_key = $2, pdf_expires_at = $3 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "65fde26aea5fc3bea8f42005f90dfd4220c6caa454ce04c5a9f932bfabdfbdc7"
+}

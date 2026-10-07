@@ -5,10 +5,19 @@
 //! from the sheet renderer and from a test, which is what keeps the capability rules in
 //! one place rather than spread across request handlers.
 
+pub mod blob;
 pub mod error;
 pub mod ids;
+pub mod model;
+pub mod store;
+
+#[cfg(feature = "testing")]
+pub mod testing;
 pub mod url;
 
+pub use blob::{BlobKey, BlobRead, BlobStore, FsBlobStore};
 pub use error::{Error, Result};
 pub use ids::{CodeId, Secret, SecretHash, decoy_hash};
+pub use model::{Binding, BlobRecord, Code, EventKind, MintedCode, Sheet};
+pub use store::Store;
 pub use url::BaseUrl;

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO blobs (key, byte_size, media_type) VALUES ($1, $2, $3)\n        ON CONFLICT (key) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9e55644481f0edb66c0fd467944c12f80f2eb20f2ef86ea626c792ce67ac1fdd"
+}

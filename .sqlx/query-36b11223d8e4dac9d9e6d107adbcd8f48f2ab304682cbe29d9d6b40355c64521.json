@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH inserted AS (\n                INSERT INTO app_secret (id, signing_key) VALUES (1, $1)\n                ON CONFLICT (id) DO NOTHING\n                RETURNING signing_key\n            )\n            SELECT signing_key FROM inserted\n            UNION ALL\n            SELECT signing_key FROM app_secret WHERE id = 1\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "signing_key",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "36b11223d8e4dac9d9e6d107adbcd8f48f2ab304682cbe29d9d6b40355c64521"
+}
