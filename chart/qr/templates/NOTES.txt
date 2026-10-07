@@ -1,0 +1,26 @@
+{{ include "qr.fullname" . }} is installed, serving {{ .Values.publicBaseUrl }}.
+
+Watch it come up:
+
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "qr.fullname" . }}
+
+The migration runs in an init container, so a schema that would not apply shows up as a
+pod that never starts rather than as a half-migrated database behind the Service:
+
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "qr.fullname" . }} -c migrate
+
+{{ if not .Values.admin.tokenSecret -}}
+admin.tokenSecret is unset, so the bearer-token route is not mounted and the admin API is
+reachable only from a browser session. Set it to mint codes from a script.
+{{- end }}
+
+{{ if not .Values.persistence.enabled -}}
+WARNING: persistence is off. Photos are written to the pod's filesystem and are lost the
+next time it restarts.
+{{- end }}
+
+{{ if eq .Values.publicBaseUrl "https://qr.shine.town" -}}
+{{- else -}}
+publicBaseUrl is {{ .Values.publicBaseUrl }}. It is encoded into every sticker this
+service prints, and a printed sticker outlives any address that is not the public one.
+{{- end }}

@@ -1,0 +1,185 @@
+{{- $fullName := include "qr.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qr.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  # One replica, and Recreate rather than RollingUpdate: the photos are on a
+  # ReadWriteOnce volume, and a rolling update asks a second pod to attach it before the
+  # first has let go.
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "qr.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "qr.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "qr.serviceAccountName" . }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if or .Values.migrations.enabled .Values.initContainers }}
+      initContainers:
+        {{- if .Values.migrations.enabled }}
+        - name: migrate
+          image: {{ include "qr.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The binary named outright rather than left to an entrypoint, which is what
+          # lets one image migrate and serve without a script deciding between them.
+          command:
+            - /bin/qr-server
+          args:
+            - migrate
+          env:
+            {{- include "qr.databaseEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- end }}
+        {{- with .Values.initContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: qr
+          image: {{ include "qr.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/qr-server
+          args:
+            - serve
+            - --bind=0.0.0.0:{{ .Values.service.httpPort }}
+            - --health-bind=0.0.0.0:{{ .Values.service.healthPort }}
+            - --base-url={{ .Values.publicBaseUrl }}
+            - --blob-root={{ .Values.persistence.mountPath }}
+            - --admin-header={{ .Values.admin.header }}
+            - --admin-session-hours={{ .Values.admin.sessionHours }}
+            - --code-id-len={{ .Values.codes.idLength }}
+            - --code-secret-len={{ .Values.codes.secretLength }}
+            - --qr-ec-level={{ .Values.codes.errorCorrection }}
+            # int64, or YAML hands Helm a float and the flag renders as 2.62144e+07.
+            - --max-upload-bytes={{ int64 .Values.uploads.maxBytes }}
+            - --max-upload-pixels={{ int64 .Values.uploads.maxPixels }}
+            {{- if .Values.uploads.stripOriginalExif }}
+            - --strip-original-exif
+            {{- end }}
+            {{- if .Values.admin.tokenSecret }}
+            - --admin-token-file=/run/admin-token/{{ .Values.admin.tokenSecretKey }}
+            {{- end }}
+            {{- with .Values.oidc.issuer }}
+            - --oidc-issuer={{ . }}
+            {{- end }}
+            {{- with .Values.oidc.audience }}
+            - --oidc-audience={{ . }}
+            {{- end }}
+            {{- range .Values.extraArgs }}
+            - {{ . }}
+            {{- end }}
+          env:
+            {{- include "qr.databaseEnv" . | nindent 12 }}
+            - name: QR_LOG
+              value: {{ .Values.logLevel | quote }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.service.healthPort }}
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: photos
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+            # The read-only root filesystem needs one writable path: multipart uploads
+            # stage here, and so does the sheet renderer's working directory.
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.admin.tokenSecret }}
+            - name: admin-token
+              mountPath: /run/admin-token
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: photos
+          persistentVolumeClaim:
+            claimName: {{ include "qr.claimName" . }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.admin.tokenSecret }}
+        - name: admin-token
+          secret:
+            secretName: {{ .Values.admin.tokenSecret }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

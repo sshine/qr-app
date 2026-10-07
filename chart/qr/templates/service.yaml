@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "qr.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qr.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    {{- include "qr.selectorLabels" . | nindent 4 }}
+  # Only the HTTP port. The probes are on a second port on purpose, and /readyz queries
+  # the database, which is not something to put behind a public route.
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP

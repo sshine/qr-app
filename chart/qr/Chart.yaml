@@ -1,0 +1,22 @@
+apiVersion: v2
+name: qr
+description: Pre-printed QR stickers, and what they open
+type: application
+
+# The chart version and the binary move together here, because appVersion is the default
+# for image.tag and so has to name a tag the release actually publishes. Publishing is a
+# git tag of the same version.
+version: 0.1.0
+appVersion: "0.1.0"
+
+home: https://qr.shine.town
+sources:
+  - https://git.shine.town/sshine/qr
+
+keywords:
+  - qr
+  - labels
+  - photos
+
+maintainers:
+  - name: sshine

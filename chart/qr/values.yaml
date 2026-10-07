@@ -1,0 +1,176 @@
+# The application workload and nothing else: a Deployment, a Service and the volume the
+# photos live on. The database, the auth proxy and the route are the cluster's business
+# and are declared beside this release rather than by it.
+
+image:
+  repository: git.shine.town/infra/qr
+  # Empty means the chart's appVersion. A cluster tracking a mutable tag sets it here and
+  # leaves something watching the registry to roll the Deployment.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# There is no replicaCount. The photos sit on a ReadWriteOnce volume that one pod holds
+# open, so a second replica would not schedule, and the deployment strategy below is
+# Recreate for the same reason.
+
+# Where the service answers, and where the probes do. Two ports on purpose: a readiness
+# check that queries the database is not something to route from the internet.
+service:
+  port: 80
+  httpPort: 8080
+  healthPort: 9090
+  annotations: {}
+
+# The public name, which is encoded into every sticker this service prints. It must be
+# the name a phone will resolve months later, so it is never an in-cluster address.
+publicBaseUrl: https://qr.shine.town
+
+postgres:
+  # Secret holding the connection string. CNPG writes a ready-made `uri` into
+  # <cluster>-app, which is why this is one key rather than a host, a user and a password
+  # assembled somewhere: the image has no shell to assemble them in.
+  existingSecret: ""
+  existingSecretKey: uri
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: hcloud-volumes
+  accessModes:
+    - ReadWriteOnce
+  # A photo is the one thing here that cannot be rebuilt from git, so it goes on
+  # network-attached storage that survives losing a node. 10Gi is Hetzner's minimum.
+  size: 10Gi
+  mountPath: /data
+
+# Applied before the pod serves, as the same image in a different mode. One replica, so
+# nothing races, and a failed migration leaves the previous pod serving rather than
+# putting a half-migrated schema behind the Service.
+migrations:
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+# How admin identity reaches the application.
+#
+# The header is injected by an auth proxy in front of /admin and stripped from anything
+# arriving with it, so a request that went round the proxy has none and is refused.
+admin:
+  header: X-Forwarded-Email
+  sessionHours: 12
+  # Secret holding a bearer token for scripted calls, which have no browser to run an
+  # OIDC redirect in. Empty leaves that route unmounted.
+  tokenSecret: ""
+  tokenSecretKey: token
+
+# Validated against the Keycloak realm for calls that carry one instead of a cookie.
+oidc:
+  issuer: ""
+  audience: ""
+
+# Code geometry. These decide how large a printed symbol comes out, so they are the knobs
+# a measuring session turns; see `qr-server budget`.
+codes:
+  idLength: 10
+  secretLength: 16
+  errorCorrection: Q
+
+uploads:
+  maxBytes: 26214400
+  # The guard that matters: a 2 MB file can declare 50000 x 50000 and ask for a four
+  # gigabyte allocation before a single pixel is wrong.
+  maxPixels: 50000000
+  # Off, so /full serves the file the camera produced. On, it is re-encoded and stripped,
+  # which also removes the GPS coordinates of wherever the photo was taken.
+  stripOriginalExif: false
+
+logLevel: "qr_server=info,qr_core=info,tower_http=warn"
+
+# Anything else the binary accepts, for a flag this chart has not grown a value for yet.
+extraArgs: []
+env: []
+envFrom: []
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 96Mi
+  # No CPU limit: rendering a sheet forks typst and resizing a photo saturates a core for
+  # a moment, and both should take what the node has spare rather than be throttled into
+  # taking longer while it idles. The memory ceiling is sized for a decoded phone photo
+  # plus a typst compile, not for steady state.
+  limits:
+    memory: 512Mi
+
+# Liveness touches nothing, so a database failover is a pause rather than a crash loop.
+# Readiness checks the pool and the volume, so a pod that cannot serve leaves the Service.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: health
+  periodSeconds: 30
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: health
+  initialDelaySeconds: 2
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Longer than the request timeout the server applies, so an upload in flight finishes
+# rather than being killed between writing the blob and committing the row.
+terminationGracePeriodSeconds: 45
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  # Without this a freshly provisioned volume mounts root-owned and nobody cannot write
+  # a photo into it. The failure is silent until the first upload.
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Nothing here reads the Kubernetes API.
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+automountServiceAccountToken: false
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}
+
+commonLabels: {}
+deploymentAnnotations: {}
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+revisionHistoryLimit: 10
+
+extraVolumes: []
+extraVolumeMounts: []
+extraContainers: []
+initContainers: []
