@@ -1,0 +1,37 @@
+# Rust
+/target/
+
+# Nix
+/.direnv/
+/result
+/result-*
+/hk.pkl
+/image
+/image.tar.gz
+
+# Helm
+/dist/
+
+# Local Postgres (just db-up) and local photo blobs
+/.pgdata/
+/.local/
+
+# Scratch output
+/sheet.pdf
+/calibration.pdf
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Editor backups
+*~
+
+# Agentic
+.claude/*
+!.claude/skills/

@@ -1,0 +1,64 @@
+{ inputs, ... }:
+{
+  imports = [ inputs.treefmt-nix.flakeModule ];
+  perSystem =
+    { pkgs, lib, ... }:
+    let
+      rust-toolchain = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
+    in
+    {
+      treefmt = {
+        projectRootFile = "flake.nix";
+
+        programs.nixfmt.enable = true;
+        programs.rustfmt = {
+          # The toolchain's own rustfmt, not nixpkgs'. Otherwise the formatter and the
+          # compiler disagree about edition 2024 syntax and the hook rewrites what
+          # clippy then rejects.
+          enable = true;
+          package = rust-toolchain;
+        };
+        programs.taplo.enable = true;
+        programs.mdformat.enable = true;
+        programs.yamlfmt = {
+          enable = true;
+          # Blank lines separate a workflow's sections; collapsing them turns `on:`,
+          # `jobs:` and `steps:` into one wall of keys.
+          settings.formatter.retain_line_breaks_single = true;
+        };
+
+        # Scoped by extension rather than enabled wholesale: prettier's default include
+        # list also claims HTML, and there is none here that it could parse.
+        programs.prettier.enable = true;
+        settings.formatter.prettier.includes = lib.mkForce [
+          "*.css"
+          "*.js"
+          "*.json"
+        ];
+
+        settings.formatter.typstyle = {
+          command = lib.getExe pkgs.typstyle;
+          options = [ "-i" ];
+          includes = [ "*.typ" ];
+        };
+
+        settings.global.excludes = [
+          "target/**"
+          "result"
+          "result-*"
+          "*.lock"
+          "dist/**"
+          # Helm templates are YAML with Go template directives interleaved, which no
+          # YAML formatter can parse.
+          "chart/*/templates/*"
+          # sqlx writes these; `cargo sqlx prepare` is the only thing that should.
+          ".sqlx/**"
+          # Hand-numbered and read in order alongside the queries that depend on them.
+          "crates/qr-core/migrations/*.sql"
+          # Vendored upstream builds stay byte-identical so their checksum can be
+          # compared against the published artifact.
+          "crates/qr-server/assets/vendor/**"
+        ];
+      };
+    };
+}
