@@ -48,6 +48,12 @@
             name = "DATABASE_URL";
             value = "postgres://qr:qr@127.0.0.1:5433/qr";
           }
+          # The binary reads QR_DATABASE_URL; sqlx-cli reads DATABASE_URL. Both are set
+          # rather than one being made to understand the other.
+          {
+            name = "QR_DATABASE_URL";
+            value = "postgres://qr:qr@127.0.0.1:5433/qr";
+          }
           # Photo blobs. Production mounts a PVC here; locally it is a gitignored
           # directory, so `rm -rf` is the whole reset.
           {
