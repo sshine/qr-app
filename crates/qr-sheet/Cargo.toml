@@ -20,7 +20,7 @@ serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "process", "time"] }
-toml = { workspace = true, features = ["parse"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

@@ -26,10 +26,13 @@ const MAX_LEN: usize = 24;
 pub const CODE_ID_LEN_RANGE: std::ops::RangeInclusive<usize> = 6..=12;
 pub const SECRET_LEN_RANGE: std::ops::RangeInclusive<usize> = 12..=24;
 
-/// The default id length, 40 bits. Generation retries on the primary key anyway, so this
-/// is about how long an id can be left lying around before a retry is likely, not about
-/// whether a collision is survivable.
-pub const DEFAULT_CODE_ID_LEN: usize = 8;
+/// The default id length, 50 bits.
+///
+/// Measured rather than chosen: at the default secret length and error-correction level,
+/// every id from six to twelve characters encodes to the same symbol (see qr-sheet's
+/// budget sweep), so the extra characters are free and the only reason to spend fewer
+/// would be a shorter line of text under the QR.
+pub const DEFAULT_CODE_ID_LEN: usize = 10;
 
 /// The default secret length, 80 bits. Uniform randomness, so there is nothing to
 /// brute-force offline and no reason for a password KDF over it.

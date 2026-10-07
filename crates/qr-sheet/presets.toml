@@ -1,0 +1,161 @@
+# Sheet layouts, in millimetres on A4.
+#
+# The label stock is the Relief laser range Bog & Idé sells; the model codes match the
+# Avery sizes those sheets are cut to, so a preset here also fits the equivalent Avery
+# stock. `plain` is blank paper with cut guides and needs no stock at all.
+#
+# Every printer places the page origin a millimetre or two differently. `qr-server sheet
+# --calibration` prints crosshairs to measure that against; correct it by overriding
+# margin_left_mm and margin_top_mm rather than by editing a preset, so the stock's real
+# geometry stays recorded here.
+#
+# qr_mm is the symbol alone; the renderer adds the four-module quiet zone around it, so a
+# sticker must leave qr_mm * (modules + 8) / modules. The caption sits beside the symbol
+# in whatever width is left, and its type size is fitted to that column, so the figures
+# below were chosen against a 33-module symbol and are checked on every render.
+
+[plain]
+description = "Blank A4 with dashed cut guides, 12 up"
+cols = 2
+rows = 6
+margin_left_mm = 8.0
+margin_top_mm = 12.0
+pitch_x_mm = 97.0
+pitch_y_mm = 46.0
+label_w_mm = 95.0
+label_h_mm = 45.0
+inset_x_mm = 2.5
+inset_y_mm = 2.5
+qr_mm = 30.0
+label_lines = 2
+cut_guides = true
+print_secret = true
+
+[relief-t7160]
+description = "Relief t7160 / Avery L7160, 63.5 x 38.1 mm, 21 up"
+cols = 3
+rows = 7
+margin_left_mm = 7.2
+margin_top_mm = 15.1
+pitch_x_mm = 66.0
+pitch_y_mm = 38.1
+label_w_mm = 63.5
+label_h_mm = 38.1
+inset_x_mm = 2.0
+inset_y_mm = 2.0
+qr_mm = 27.0
+label_lines = 1
+cut_guides = false
+print_secret = true
+
+[relief-t7163]
+description = "Relief t7163 / Avery L7163, 99.1 x 38.1 mm, 14 up"
+cols = 2
+rows = 7
+margin_left_mm = 5.0
+margin_top_mm = 15.1
+pitch_x_mm = 101.6
+pitch_y_mm = 38.1
+label_w_mm = 99.1
+label_h_mm = 38.1
+inset_x_mm = 2.0
+inset_y_mm = 2.0
+qr_mm = 27.0
+label_lines = 2
+cut_guides = false
+print_secret = true
+
+# The one to reach for when a box is photographed from across a room: 1.2 mm modules
+# against t7160's 0.8.
+[relief-t7165]
+description = "Relief t7165 / Avery L7165, 99.1 x 67.7 mm, 8 up"
+cols = 2
+rows = 4
+margin_left_mm = 5.0
+margin_top_mm = 13.0
+pitch_x_mm = 101.6
+pitch_y_mm = 67.7
+label_w_mm = 99.1
+label_h_mm = 67.7
+inset_x_mm = 3.0
+inset_y_mm = 3.0
+qr_mm = 40.0
+label_lines = 3
+cut_guides = false
+print_secret = true
+
+# A shelf or a room, not a box.
+[relief-t7167]
+description = "Relief t7167, one 199.6 x 289.1 mm label per sheet"
+cols = 1
+rows = 1
+margin_left_mm = 5.2
+margin_top_mm = 4.0
+pitch_x_mm = 199.6
+pitch_y_mm = 289.1
+label_w_mm = 199.6
+label_h_mm = 289.1
+inset_x_mm = 10.0
+inset_y_mm = 10.0
+qr_mm = 100.0
+label_lines = 6
+cut_guides = false
+print_secret = true
+
+[relief-kopi-70]
+description = "Relief kopi, 70 x 36 mm, 24 up, no side margin"
+cols = 3
+rows = 8
+margin_left_mm = 0.0
+margin_top_mm = 4.5
+pitch_x_mm = 70.0
+pitch_y_mm = 36.0
+label_w_mm = 70.0
+label_h_mm = 36.0
+inset_x_mm = 5.0
+inset_y_mm = 1.5
+qr_mm = 25.0
+label_lines = 1
+cut_guides = false
+print_secret = true
+
+[relief-kopi-105]
+description = "Relief kopi, 105 x 57 mm, 10 up, no side margin"
+cols = 2
+rows = 5
+margin_left_mm = 0.0
+margin_top_mm = 6.0
+pitch_x_mm = 105.0
+pitch_y_mm = 57.0
+label_w_mm = 105.0
+label_h_mm = 57.0
+inset_x_mm = 5.0
+inset_y_mm = 3.0
+qr_mm = 40.0
+label_lines = 3
+cut_guides = false
+print_secret = true
+
+# Marginal, and kept so it can be measured rather than guessed at. A 33-module symbol at
+# 18 mm is 0.55 mm per module, which is where laser toner spread and a phone at arm's
+# length start to disagree. Dropping the error-correction level to M takes the symbol to
+# 29 modules and the modules back up to 0.62 mm.
+#
+# No secret printed: the column left over will not hold it, and a code this small is for
+# something scanned at close range.
+[relief-kopi-48]
+description = "Relief kopi, 48.5 x 25.4 mm, 40 up; modules are small, measure first"
+cols = 4
+rows = 10
+margin_left_mm = 8.0
+margin_top_mm = 21.5
+pitch_x_mm = 48.5
+pitch_y_mm = 25.4
+label_w_mm = 48.5
+label_h_mm = 25.4
+inset_x_mm = 1.0
+inset_y_mm = 1.0
+qr_mm = 18.0
+label_lines = 0
+cut_guides = false
+print_secret = false
