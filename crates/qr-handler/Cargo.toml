@@ -1,0 +1,29 @@
+[package]
+name = "qr-handler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The handler trait and registry a QR code binds to"
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["http1", "json", "query", "tokio"] }
+axum-extra = { workspace = true, features = ["cookie"] }
+chrono = { workspace = true, features = ["clock", "serde", "std"] }
+maud = { workspace = true, features = ["axum"] }
+qr-core = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true, features = ["serde", "std", "v7"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

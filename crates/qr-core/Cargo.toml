@@ -1,0 +1,49 @@
+[package]
+name = "qr-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Code identities, capability secrets, storage and blobs for qr.shine.town"
+
+[lints]
+workspace = true
+
+[features]
+# A per-test database, created from migrations and dropped on Drop. Behind a feature
+# because it links sqlx's admin paths into anything that depends on it.
+testing = ["dep:tempfile"]
+
+[dependencies]
+async-trait = { workspace = true }
+base64 = { workspace = true, features = ["std"] }
+blake3 = { workspace = true, features = ["std"] }
+bytes = { workspace = true, features = ["std"] }
+chrono = { workspace = true, features = ["clock", "serde", "std"] }
+getrandom = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+sqlx = { workspace = true, features = [
+  "chrono",
+  "derive",
+  "json",
+  "macros",
+  "migrate",
+  "postgres",
+  "runtime-tokio",
+  "tls-rustls-ring",
+  "uuid",
+] }
+subtle = { workspace = true }
+tempfile = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "sync"] }
+tokio-util = { workspace = true, features = ["io"] }
+tracing = { workspace = true }
+uuid = { workspace = true, features = ["serde", "std", "v7"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,27 @@
+[package]
+name = "qr-sheet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "A4 sticker sheets of QR codes, rendered through typst"
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = { workspace = true, features = ["std"] }
+qr-core = { workspace = true }
+qrcode = { workspace = true, features = ["svg"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "process", "time"] }
+toml = { workspace = true, features = ["parse"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

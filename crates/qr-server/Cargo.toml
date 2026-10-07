@@ -1,0 +1,93 @@
+[package]
+name = "qr-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The qr.shine.town web service"
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+axum = { workspace = true, features = [
+  "http1",
+  "json",
+  "macros",
+  "multipart",
+  "query",
+  "tokio",
+  "tower-log",
+] }
+axum-extra = { workspace = true, features = ["cookie"] }
+chrono = { workspace = true, features = ["clock", "serde", "std"] }
+clap = { workspace = true, features = [
+  "derive",
+  "env",
+  "error-context",
+  "help",
+  "std",
+  "suggestions",
+  "usage",
+  "wrap_help",
+] }
+humantime = { workspace = true }
+jsonwebtoken = { workspace = true, features = ["use_pem"] }
+maud = { workspace = true, features = ["axum"] }
+mime = { workspace = true }
+mime_guess = { workspace = true, features = ["default"] }
+qr-core = { workspace = true }
+qr-forward = { workspace = true }
+qr-handler = { workspace = true }
+qr-photos = { workspace = true }
+qr-sheet = { workspace = true }
+reqwest = { workspace = true, features = [
+  "charset",
+  "http2",
+  "json",
+  "rustls",
+] }
+rust-embed = { workspace = true, features = ["mime-guess"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+sqlx = { workspace = true, features = [
+  "postgres",
+  "runtime-tokio",
+  "tls-rustls-ring",
+] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "macros",
+  "rt-multi-thread",
+  "signal",
+  "time",
+] }
+tokio-util = { workspace = true, features = ["io"] }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = [
+  "catch-panic",
+  "compression-br",
+  "compression-gzip",
+  "limit",
+  "sensitive-headers",
+  "set-header",
+  "timeout",
+  "trace",
+] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = [
+  "ansi",
+  "env-filter",
+  "fmt",
+  "std",
+] }
+uuid = { workspace = true, features = ["serde", "std", "v7"] }
+
+[dev-dependencies]
+qr-core = { workspace = true, features = ["testing"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "test-util"] }
+tower = { workspace = true, features = ["util"] }
