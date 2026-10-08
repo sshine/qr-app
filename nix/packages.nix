@@ -19,6 +19,9 @@
       checks = {
         inherit qr-server;
 
+        # The #[ignore]d tests, against a Postgres this starts in the sandbox.
+        integration = pkgs.callPackage ./_integration.nix { };
+
         # A green build says nothing about whether the binary starts. --check-config
         # parses and validates everything and exits before opening a socket or a
         # connection, so this catches a broken wrapper or a flag that no longer exists.
@@ -41,6 +44,7 @@
       apps.default = {
         type = "app";
         program = lib.getExe qr-server;
+        meta.description = "Serve qr.shine.town, print a sheet, or size a QR";
       };
     };
 }

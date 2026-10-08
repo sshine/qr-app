@@ -3,7 +3,7 @@
 # and are declared beside this release rather than by it.
 
 image:
-  repository: git.shine.town/infra/qr
+  repository: git.shine.town/sshine/qr
   # Empty means the chart's appVersion. A cluster tracking a mutable tag sets it here and
   # leaves something watching the registry to roll the Deployment.
   tag: ""

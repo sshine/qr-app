@@ -15,7 +15,7 @@
   cacert,
   runCommand,
   qr-server,
-  name ? "git.shine.town/infra/qr",
+  name ? "git.shine.town/sshine/qr",
   tag ? "latest",
 }:
 dockerTools.streamLayeredImage {

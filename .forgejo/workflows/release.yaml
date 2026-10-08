@@ -1,0 +1,56 @@
+name: Release
+
+# The image publishes from main, because the deployment tracks :latest and something
+# watches the registry to roll it. The chart publishes only from a tag, because a chart
+# version is immutable by convention and the cluster vendors it by hand.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# A full Nix image build from a cold store is more than one worker carries twice over,
+# and two pushes close together would otherwise do exactly that.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: nixos
+    steps:
+      # Tags, so `git describe` can see one and the version tag gets pushed alongside
+      # :latest. A shallow checkout reports no tag and silently publishes neither.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build image
+        run: nix develop --command just image
+
+      # :latest, :<short-sha>, and the version when the commit carries a tag.
+      - name: Push image
+        env:
+          SKOPEO_DEST_CREDS: forgejo_admin:${{ secrets.QR_PACKAGE_UPLOAD_KEY }}
+        run: nix develop --command just image-push
+
+      - name: Push chart
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          HELM_REGISTRY_USER: forgejo_admin
+          HELM_REGISTRY_PASSWORD: ${{ secrets.QR_PACKAGE_UPLOAD_KEY }}
+        run: nix develop .#chart --command just chart-push
+
+      # Keel polls the registry every five minutes anyway, so this only removes the
+      # delay and a failure must not fail the release. No credentials: keel is a
+      # ClusterIP and this runner is in the cluster.
+      - name: Trigger redeploy
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          curl -sS --fail-with-body --connect-timeout 5 --max-time 15 \
+            -X POST http://keel.keel.svc.cluster.local:9300/v1/webhooks/native \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"git.shine.town/sshine/qr","tag":"latest"}'

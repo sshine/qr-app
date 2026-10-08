@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  check:
+    # The in-cluster runner: it has nix already and substitutes from the cluster's own
+    # binary cache rather than fetching a Rust toolchain across the internet.
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v4
+
+      # Formatting, clippy, the offline query cache, the tests that need nothing, docs,
+      # a release build and the lockfile. One recipe per named step lives in the
+      # justfile so a red run says which check failed rather than which script did.
+      - name: Checks
+        run: nix develop --command just ci
+
+      # The package build and its unit tests, the startup check that runs the binary,
+      # and the integration derivation, which starts a Postgres in the sandbox and runs
+      # the tests that are #[ignore]d everywhere else.
+      - name: Flake check
+        run: nix flake check -L
+
+      # The chart shell, not the default one: that carries a Rust toolchain and a
+      # Postgres, which on an empty store costs minutes before helm is reached.
+      - name: Chart
+        run: nix develop .#chart --command just chart-lint
+
+      # Feeds the chart's rendered arguments back to the binary. The two are separate
+      # artifacts with no compiler between them, so without this a renamed flag ships
+      # and is discovered as a CrashLoopBackOff. Needs the package, so it runs in the
+      # default shell where `nix build` is a store hit from the step above.
+      - name: Chart arguments
+        run: nix develop --command just chart-args-check

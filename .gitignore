@@ -19,6 +19,7 @@
 # Scratch output
 /sheet.pdf
 /calibration.pdf
+/samples/
 
 # IDE
 .idea/

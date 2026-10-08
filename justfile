@@ -1,8 +1,8 @@
-image_name := "git.shine.town/infra/qr"
+image_name := "git.shine.town/sshine/qr"
 chart := "chart/qr"
 # Under charts/ rather than beside the image: helm push appends the chart name, which is
 # also the image name, so both would write tags into one OCI repository.
-chart_registry := "oci://git.shine.town/infra/charts"
+chart_registry := "oci://git.shine.town/sshine/charts"
 
 pgdata := justfile_directory() / ".pgdata"
 pgport := "5433"
