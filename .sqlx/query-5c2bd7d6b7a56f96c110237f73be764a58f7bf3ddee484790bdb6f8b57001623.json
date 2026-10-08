@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE forward_targets SET superseded_at = now()\n        WHERE binding_id = $1 AND superseded_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5c2bd7d6b7a56f96c110237f73be764a58f7bf3ddee484790bdb6f8b57001623"
+}
