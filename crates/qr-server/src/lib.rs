@@ -3,6 +3,8 @@
 //! A library with a thin `main.rs` over it, so an integration test can start the real
 //! server in-process and drive it without a subprocess or a socket.
 
+pub mod app;
+pub mod assets;
 pub mod cli;
 pub mod error;
 pub mod health;
@@ -104,8 +106,11 @@ async fn serve(args: ServeArgs) -> Result<(), StartupError> {
 
     // Both listeners come up together and go down together. A process serving requests
     // whose probes have stopped answering is worse than one that is simply gone.
+    let registry = app::registry().map_err(|e| StartupError::Registry(e.to_string()))?;
+    let state = app::state(&args, store.clone(), Arc::clone(&blobs), registry).await?;
+
     let health = health::Health::new(store.clone(), Arc::clone(&blobs)).router();
-    let public = axum::Router::new().route("/healthz", axum::routing::get(|| async { "ok\n" }));
+    let public = app::router(state);
 
     let public_listener = listen(args.bind).await?;
     let health_listener = listen(args.health_bind).await?;

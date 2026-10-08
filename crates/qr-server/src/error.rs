@@ -37,6 +37,9 @@ pub enum StartupError {
         source: qr_core::Error,
     },
 
+    #[error("two handlers claim the same id: {0}")]
+    Registry(String),
+
     #[error("could not read the admin token from {}", path.display())]
     AdminToken {
         path: PathBuf,

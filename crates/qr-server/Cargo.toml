@@ -50,7 +50,7 @@ reqwest = { workspace = true, features = [
   "json",
   "rustls",
 ] }
-rust-embed = { workspace = true, features = ["mime-guess"] }
+rust-embed = { workspace = true, features = ["include-exclude", "mime-guess"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 sqlx = { workspace = true, features = [

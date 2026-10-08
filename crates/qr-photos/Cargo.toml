@@ -39,6 +39,7 @@ sqlx = { workspace = true, features = [
 ] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"] }
+tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 uuid = { workspace = true, features = ["serde", "std", "v7"] }
 
