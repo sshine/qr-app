@@ -7,23 +7,28 @@ on:
       - main
   workflow_dispatch:
 
+# One group shared with the release workflow, so a push to main does not start a CI run
+# and an image build on the same runner at the same time. Both are full Nix builds of
+# the same closure, and running them together is what killed the first attempt.
+concurrency:
+  group: qr-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check:
     # The in-cluster runner: it has nix already and substitutes from the cluster's own
-    # binary cache rather than fetching a Rust toolchain across the internet.
+    # binary cache rather than fetching a toolchain across the internet.
     runs-on: nixos
     steps:
       - uses: actions/checkout@v4
 
-      # Formatting, clippy, the offline query cache, the tests that need nothing, docs,
-      # a release build and the lockfile. One recipe per named step lives in the
-      # justfile so a red run says which check failed rather than which script did.
-      - name: Checks
-        run: nix develop --command just ci
-
-      # The package build and its unit tests, the startup check that runs the binary,
-      # and the integration derivation, which starts a Postgres in the sandbox and runs
-      # the tests that are #[ignore]d everywhere else.
+      # Everything, in one cached pass: formatting through treefmt-nix, the git hooks
+      # through hk-nix, clippy, the package build and its unit tests, the startup check
+      # that runs the binary, and the integration derivation, which starts a Postgres in
+      # the sandbox and runs the tests that are #[ignore]d everywhere else.
+      #
+      # `just ci` is the same ground covered by a devshell, and running both here built
+      # the workspace three times over for one answer.
       - name: Flake check
         run: nix flake check -L
 
@@ -34,7 +39,7 @@ jobs:
 
       # Feeds the chart's rendered arguments back to the binary. The two are separate
       # artifacts with no compiler between them, so without this a renamed flag ships
-      # and is discovered as a CrashLoopBackOff. Needs the package, so it runs in the
-      # default shell where `nix build` is a store hit from the step above.
+      # and is discovered as a CrashLoopBackOff. The binary it uses is the derivation
+      # the flake check already built.
       - name: Chart arguments
         run: nix develop --command just chart-args-check

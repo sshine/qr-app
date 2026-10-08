@@ -11,10 +11,11 @@ on:
       - "v*"
   workflow_dispatch:
 
-# A full Nix image build from a cold store is more than one worker carries twice over,
+# Shares a group with the CI workflow, so a push to main does not run both at once: a
+# full Nix image build from a cold store is more than one worker carries twice over,
 # and two pushes close together would otherwise do exactly that.
 concurrency:
-  group: release
+  group: qr-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

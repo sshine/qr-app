@@ -22,6 +22,10 @@
         # The #[ignore]d tests, against a Postgres this starts in the sandbox.
         integration = pkgs.callPackage ./_integration.nix { };
 
+        # Lints, cached. Without this CI builds the workspace once for clippy, once for
+        # the tests and once for the release binary.
+        clippy = pkgs.callPackage ./_clippy.nix { };
+
         # A green build says nothing about whether the binary starts. --check-config
         # parses and validates everything and exits before opening a socket or a
         # connection, so this catches a broken wrapper or a flag that no longer exists.
