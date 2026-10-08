@@ -29,7 +29,7 @@ test:
 
 # Run every test, including the ones needing `just db-up` and typst
 test-db:
-    cargo test --workspace --all-features -- --include-ignored
+    QR_TEST_DATABASE_URL="$DATABASE_URL" cargo test --workspace --all-features -- --include-ignored
 
 # Build release
 build:

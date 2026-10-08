@@ -42,8 +42,20 @@
             name = "RUST_BACKTRACE";
             value = "1";
           }
-          # Points at what `just db-up` starts. sqlx-cli, the query! macros and a bare
-          # `cargo run` all read this one variable.
+          # Build against the committed query cache, not against whatever DATABASE_URL
+          # happens to point at.
+          #
+          # sqlx's macros prefer a live connection when DATABASE_URL is set, so without
+          # this every cargo command needs `just db-up` first, and CI — which has no
+          # Postgres on that address — fails to compile rather than to connect. Only
+          # `just sqlx-prepare` turns it off, because regenerating the cache is the one
+          # thing that genuinely needs a server.
+          {
+            name = "SQLX_OFFLINE";
+            value = "true";
+          }
+          # Points at what `just db-up` starts. sqlx-cli and a bare `cargo run` read
+          # this one variable.
           {
             name = "DATABASE_URL";
             value = "postgres://qr:qr@127.0.0.1:5433/qr";
