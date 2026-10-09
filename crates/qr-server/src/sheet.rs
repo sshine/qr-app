@@ -1,20 +1,135 @@
-//! The sheet and budget subcommands.
+//! Minting a sheet of codes, from the CLI and from the admin API.
 //!
-//! Printing is an administrative act that happens a handful of times a year, so the CLI
-//! is the primary interface and the admin API renders through the same code rather than
-//! beside it.
+//! Printing is an administrative act that happens a handful of times a year. The CLI was
+//! the first way in and `POST /admin/sheets` is the second; both go through
+//! [`mint_and_render`], so the two cannot come to mint codes on different terms.
 
 use std::path::Path;
 
 use qr_core::{BaseUrl, MintedCode, Store, model::EventKind, store};
-use qr_sheet::{Layout, Presets, SheetRenderer, SheetRequest};
+use qr_sheet::{EcLevel, Layout, Presets, SheetRenderer, SheetRequest};
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
+use uuid::Uuid;
 
 use crate::{
     StartupError,
     cli::{BudgetArgs, SheetArgs},
 };
+
+/// What minting a sheet fails with.
+///
+/// Narrower than [`StartupError`]: a request asking for stock the codes will not fit on
+/// is not the service failing to start, and the route has to tell the two apart to pick
+/// a status code.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Sheet(#[from] qr_sheet::Error),
+
+    #[error(transparent)]
+    Core(#[from] qr_core::Error),
+}
+
+impl From<Error> for StartupError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Sheet(e) => Self::Sheet(e),
+            Error::Core(e) => Self::Core(e),
+        }
+    }
+}
+
+/// What to mint, however the request arrived.
+pub struct Order<'a> {
+    pub base: &'a BaseUrl,
+    pub layout: &'a Layout,
+    pub preset: &'a str,
+    pub count: usize,
+    /// What every code on the sheet becomes on first scan, or `None` for the chooser.
+    pub handler: Option<&'a str>,
+    pub note: Option<&'a str>,
+    pub ec: EcLevel,
+    pub id_len: usize,
+    pub secret_len: usize,
+}
+
+/// A minted sheet, and the PDF of it.
+pub struct Rendered {
+    pub sheet_id: Uuid,
+    pub pdf: Vec<u8>,
+}
+
+/// Mints the codes and renders them, in one transaction with the sheet row.
+///
+/// The PDF is rendered before the transaction commits, so a sheet that could not be
+/// rendered never leaves codes behind that nobody printed. Nothing is written to the
+/// blob store: the PDF carries every secret in plaintext, and the only copy meant to
+/// outlive the request is the one on paper.
+pub async fn mint_and_render(
+    store: &Store,
+    renderer: &SheetRenderer,
+    order: Order<'_>,
+) -> Result<Rendered, Error> {
+    let mut tx = store.begin().await?;
+
+    let handler_config = json!({});
+    let sheet = store::insert_sheet(
+        &mut *tx,
+        store::NewSheet {
+            id: Uuid::now_v7(),
+            code_count: i32::try_from(order.count).unwrap_or(i32::MAX),
+            base_url: order.base.as_str(),
+            preset: order.preset,
+            layout: &serde_json::to_value(order.layout).unwrap_or_else(|_| json!({})),
+            handler_id: order.handler,
+            handler_config: &handler_config,
+            note: order.note,
+        },
+    )
+    .await?;
+
+    let minted = store::mint_codes(
+        &mut tx,
+        order.count,
+        order.id_len,
+        order.secret_len,
+        Some(sheet.id),
+        order.handler,
+        &handler_config,
+    )
+    .await?;
+
+    let request = SheetRequest {
+        codes: minted
+            .into_iter()
+            .map(|MintedCode { id, secret }| (id, secret))
+            .collect(),
+        base: order.base.clone(),
+        layout: order.layout.clone(),
+        preset: order.preset.to_owned(),
+        note: order.note.map(ToOwned::to_owned),
+        ec: order.ec,
+    };
+
+    let pdf = renderer.render(&request).await?;
+
+    store::record_event(
+        &mut *tx,
+        EventKind::SheetRendered,
+        None,
+        None,
+        &json!({ "sheet": sheet.id, "count": order.count, "preset": order.preset }),
+    )
+    .await?;
+
+    tx.commit().await.map_err(qr_core::Error::Database)?;
+
+    Ok(Rendered {
+        sheet_id: sheet.id,
+        pdf,
+    })
+}
 
 pub async fn run(args: SheetArgs, check_only: bool) -> Result<(), StartupError> {
     let base = BaseUrl::parse(&args.base_url).map_err(StartupError::BaseUrl)?;
@@ -46,74 +161,31 @@ pub async fn run(args: SheetArgs, check_only: bool) -> Result<(), StartupError> 
     Ok(())
 }
 
-/// Mints the codes and renders them, in one transaction with the sheet row.
-///
-/// The PDF is rendered before the transaction commits and stored as a blob afterwards,
-/// so a sheet that could not be rendered never leaves codes behind that nobody printed.
 async fn render_codes(
     args: &SheetArgs,
     base: &BaseUrl,
     layout: &Layout,
-    ec: qr_sheet::EcLevel,
+    ec: EcLevel,
     renderer: &SheetRenderer,
 ) -> Result<Vec<u8>, StartupError> {
-    let count = args.count.unwrap_or_else(|| layout.per_page());
     let store = connect(args).await?;
-    let mut tx = store.begin().await?;
-
-    let sheet_id = uuid::Uuid::now_v7();
-    let handler_config = json!({});
-    let sheet = store::insert_sheet(
-        &mut *tx,
-        store::NewSheet {
-            id: sheet_id,
-            code_count: i32::try_from(count).unwrap_or(i32::MAX),
-            base_url: base.as_str(),
+    let rendered = mint_and_render(
+        &store,
+        renderer,
+        Order {
+            base,
+            layout,
             preset: &args.preset,
-            layout: &serde_json::to_value(layout).unwrap_or_else(|_| json!({})),
-            handler_id: args.handler.as_deref(),
-            handler_config: &handler_config,
+            count: args.count.unwrap_or_else(|| layout.per_page()),
+            handler: args.handler.as_deref(),
             note: args.note.as_deref(),
+            ec,
+            id_len: args.codes.code_id_len,
+            secret_len: args.codes.code_secret_len,
         },
     )
     .await?;
-
-    let minted = store::mint_codes(
-        &mut tx,
-        count,
-        args.codes.code_id_len,
-        args.codes.code_secret_len,
-        Some(sheet.id),
-        args.handler.as_deref(),
-        &handler_config,
-    )
-    .await?;
-
-    let request = SheetRequest {
-        codes: minted
-            .iter()
-            .map(|MintedCode { id, secret }| (*id, secret.clone()))
-            .collect(),
-        base: base.clone(),
-        layout: layout.clone(),
-        preset: args.preset.clone(),
-        note: args.note.clone(),
-        ec,
-    };
-
-    let pdf = renderer.render(&request).await?;
-
-    store::record_event(
-        &mut *tx,
-        EventKind::SheetRendered,
-        None,
-        None,
-        &json!({ "sheet": sheet.id, "count": count, "preset": args.preset }),
-    )
-    .await?;
-
-    tx.commit().await.map_err(qr_core::Error::Database)?;
-    Ok(pdf)
+    Ok(rendered.pdf)
 }
 
 async fn connect(args: &SheetArgs) -> Result<Store, StartupError> {
@@ -126,7 +198,8 @@ async fn connect(args: &SheetArgs) -> Result<Store, StartupError> {
     Ok(Store::new(pool))
 }
 
-fn load_presets(path: Option<&Path>) -> Result<Presets, StartupError> {
+/// The built-in layouts, or the ones in a file replacing them.
+pub fn load_presets(path: Option<&Path>) -> Result<Presets, StartupError> {
     match path {
         None => Ok(Presets::builtin()?),
         Some(path) => {
