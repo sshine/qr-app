@@ -23,7 +23,7 @@ use tower_http::{
     timeout::TimeoutLayer, trace::TraceLayer,
 };
 
-use crate::{assets, cli::ServeArgs};
+use crate::{admin, assets, cli::ServeArgs};
 
 /// No inline anything, and no 'unsafe-eval' — which is the whole reason Alpine's CSP
 /// build is the one vendored. `blob:` is what lets a photo appear in the grid before
@@ -33,7 +33,7 @@ const CSP: &str = "default-src 'none'; img-src 'self' blob: data:; script-src 's
                    frame-ancestors 'none'; base-uri 'none'; manifest-src 'self'";
 
 /// Everything the public listener answers.
-pub fn router(state: AppState) -> Router {
+pub fn router(state: AppState, admin: admin::AdminState) -> Router {
     let pages = Router::new()
         .route("/", get(landing))
         .route("/go", get(go_form).post(go))
@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(qr_handler::mount(state))
         .merge(pages)
+        .merge(admin::router(admin))
         .merge(assets::router())
         .fallback(not_found)
         .layer(

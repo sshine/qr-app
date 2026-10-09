@@ -106,7 +106,8 @@ resources:
   # No CPU limit: rendering a sheet forks typst and resizing a photo saturates a core for
   # a moment, and both should take what the node has spare rather than be throttled into
   # taking longer while it idles. The memory ceiling is sized for a decoded phone photo
-  # plus a typst compile, not for steady state.
+  # plus the typst compiles --sheet-concurrency allows at once, each about 31Mi, not for
+  # steady state. Raising that flag through extraArgs means raising this too.
   limits:
     memory: 512Mi
 

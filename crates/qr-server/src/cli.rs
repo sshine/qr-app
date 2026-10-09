@@ -182,6 +182,18 @@ pub struct ServeArgs {
     /// Drop Secure from the capability cookie, so plain-HTTP localhost works.
     #[arg(long, env = "QR_INSECURE_COOKIES")]
     pub insecure_cookies: bool,
+
+    /// Replace the built-in layouts, for stock these do not cover.
+    #[arg(long, env = "QR_PRESETS_FILE")]
+    pub presets_file: Option<PathBuf>,
+
+    /// Sheets rendered at once on the admin API.
+    ///
+    /// Each one forks typst, which peaks around 31MB resident and holds a core for about
+    /// a tenth of a second. Two at a time leaves the pod's memory ceiling to the photo
+    /// uploads that arrive all year round rather than to the printing done twice a year.
+    #[arg(long, env = "QR_SHEET_CONCURRENCY", default_value_t = 2)]
+    pub sheet_concurrency: u8,
 }
 
 #[derive(Debug, ClapArgs)]

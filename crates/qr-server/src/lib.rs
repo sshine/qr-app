@@ -3,6 +3,7 @@
 //! A library with a thin `main.rs` over it, so an integration test can start the real
 //! server in-process and drive it without a subprocess or a socket.
 
+pub mod admin;
 pub mod app;
 pub mod assets;
 pub mod cli;
@@ -77,6 +78,8 @@ fn validate_serve(args: &ServeArgs) -> Result<(), StartupError> {
         return Err(StartupError::InsecureCookiesOffLoopback { addr: args.bind });
     }
 
+    admin::check_presets(args.presets_file.as_deref())?;
+
     Ok(())
 }
 
@@ -110,7 +113,7 @@ async fn serve(args: ServeArgs) -> Result<(), StartupError> {
     let state = app::state(&args, store.clone(), Arc::clone(&blobs), registry).await?;
 
     let health = health::Health::new(store.clone(), Arc::clone(&blobs)).router();
-    let public = app::router(state);
+    let public = app::router(state.clone(), admin::state(&args, state)?);
 
     let public_listener = listen(args.bind).await?;
     let health_listener = listen(args.health_bind).await?;
