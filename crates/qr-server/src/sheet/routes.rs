@@ -1,19 +1,21 @@
-//! The admin API.
+//! Minting a sheet of codes over HTTP.
 //!
-//! One route so far, and it mints. Everything here is behind [`RequireAdmin`] rather
-//! than behind the capability cookie: a sheet is minted before any of its codes exist,
-//! so there is no code to hold a capability for.
+//! Open on purpose. A request here mints codes that did not exist a moment ago, each
+//! with a secret of its own, and the response is the only copy of them; it reaches
+//! nothing minted earlier and no code anyone is already holding. What it does cost is
+//! database rows and a typst compile, which is what the ceiling and the permit below
+//! are for.
 
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{FromRef, State},
+    extract::State,
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
-use qr_handler::{AdminConfig, AdminIdentity, AppState, RequireAdmin};
+use qr_handler::AppState;
 use qr_sheet::{EcLevel, Presets, SheetRenderer};
 use serde::Deserialize;
 use tokio::sync::Semaphore;
@@ -28,9 +30,9 @@ use crate::{StartupError, cli::ServeArgs, sheet};
 /// nothing after the codes have already been minted.
 const MAX_CODES: usize = 1000;
 
-/// What the admin routes need on top of [`AppState`].
+/// What this route needs on top of [`AppState`].
 #[derive(Clone)]
-pub struct AdminState {
+pub struct SheetState {
     app: AppState,
     sheets: Arc<Sheets>,
 }
@@ -48,15 +50,9 @@ struct Sheets {
     permits: Semaphore,
 }
 
-impl FromRef<AdminState> for AdminConfig {
-    fn from_ref(state: &AdminState) -> Self {
-        Self::from_ref(&state.app)
-    }
-}
-
-/// Builds the state the admin routes share.
-pub fn state(args: &ServeArgs, app: AppState) -> Result<AdminState, StartupError> {
-    Ok(AdminState {
+/// Builds the state this route needs.
+pub fn state(args: &ServeArgs, app: AppState) -> Result<SheetState, StartupError> {
+    Ok(SheetState {
         app,
         sheets: Arc::new(Sheets {
             renderer: SheetRenderer::new(
@@ -72,14 +68,14 @@ pub fn state(args: &ServeArgs, app: AppState) -> Result<AdminState, StartupError
     })
 }
 
-/// Everything the admin API answers.
-pub fn router(state: AdminState) -> Router {
+/// Where minting answers.
+pub fn router(state: SheetState) -> Router {
     Router::new()
-        .route("/admin/sheets", post(create_sheet))
+        .route("/api/v1/sheets", post(create_sheet))
         .with_state(state)
 }
 
-/// What `POST /admin/sheets` accepts.
+/// What `POST /api/v1/sheets` accepts.
 ///
 /// Unknown fields are refused rather than ignored, because a misspelled `handler` that
 /// is quietly dropped is a sheet of codes that land on the chooser, discovered once they
@@ -99,16 +95,12 @@ struct NewSheet {
     ec: Option<String>,
 }
 
-/// `POST /admin/sheets` — mints a sheet of codes and answers with the PDF.
+/// `POST /api/v1/sheets` — mints a sheet of codes and answers with the PDF.
 ///
 /// The bytes are the whole response and are kept nowhere. They carry every secret on the
 /// sheet in plaintext, so there is no second copy to expire, collect, or leak, and a
 /// download that was lost is reprinted by minting another sheet.
-async fn create_sheet(
-    State(state): State<AdminState>,
-    RequireAdmin(admin): RequireAdmin,
-    Json(body): Json<NewSheet>,
-) -> Response {
+async fn create_sheet(State(state): State<SheetState>, Json(body): Json<NewSheet>) -> Response {
     let sheets = &state.sheets;
 
     let Ok(layout) = sheets.presets.get(&body.preset) else {
@@ -166,7 +158,7 @@ async fn create_sheet(
     match rendered {
         Err(error) => sheet_response(&error),
         Ok(rendered) => {
-            audit(&admin, rendered.sheet_id, count, &body);
+            minted(rendered.sheet_id, count, &body);
             (
                 StatusCode::CREATED,
                 [
@@ -185,12 +177,10 @@ async fn create_sheet(
     }
 }
 
-/// Who minted what, at info level, so a sheet that nobody admits to printing can be
-/// traced to the door its request came through.
-fn audit(admin: &AdminIdentity, sheet: uuid::Uuid, count: usize, body: &NewSheet) {
+/// What was minted, at info level, so a sheet found on a desk months later can be
+/// matched to the request that printed it.
+fn minted(sheet: uuid::Uuid, count: usize, body: &NewSheet) {
     tracing::info!(
-        subject = %admin.subject,
-        source = ?admin.source,
         %sheet,
         count,
         preset = %body.preset,
@@ -228,10 +218,4 @@ fn sheet_response(error: &sheet::Error) -> Response {
             (StatusCode::INTERNAL_SERVER_ERROR, "something went wrong\n").into_response()
         }
     }
-}
-
-/// Reads the presets a deployment was given, so `--check-config` refuses a file that
-/// does not parse rather than leaving it to the first print of the year.
-pub fn check_presets(path: Option<&Path>) -> Result<(), StartupError> {
-    sheet::load_presets(path).map(drop)
 }

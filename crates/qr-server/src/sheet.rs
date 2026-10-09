@@ -1,8 +1,10 @@
-//! Minting a sheet of codes, from the CLI and from the admin API.
+//! Minting a sheet of codes, from the CLI and over HTTP.
 //!
-//! Printing is an administrative act that happens a handful of times a year. The CLI was
-//! the first way in and `POST /admin/sheets` is the second; both go through
-//! [`mint_and_render`], so the two cannot come to mint codes on different terms.
+//! Printing happens a handful of times a year. The CLI was the first way in and
+//! `POST /api/v1/sheets` is the second; both go through [`mint_and_render`], so the two
+//! cannot come to mint codes on different terms.
+
+pub mod routes;
 
 use std::path::Path;
 
@@ -268,4 +270,10 @@ pub fn budget(args: &BudgetArgs) -> Result<(), StartupError> {
          and a phone at arm's length start to disagree."
     );
     Ok(())
+}
+
+/// Reads the presets a deployment was given, so `--check-config` refuses a file that
+/// does not parse rather than leaving it to the first print of the year.
+pub fn check_presets(path: Option<&Path>) -> Result<(), StartupError> {
+    load_presets(path).map(drop)
 }

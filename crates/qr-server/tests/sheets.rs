@@ -1,8 +1,8 @@
-//! `POST /admin/sheets`, against a real database and a real typst.
+//! `POST /api/v1/sheets`, against a real database and a real typst.
 //!
-//! Driven through the assembled router rather than the handler, so the admin guard, the
-//! body limit and the response headers are the ones a deployment serves. Ignored for the
-//! same reason the other suites are: `nix flake check` and `just test-db` supply both.
+//! Driven through the assembled router rather than the handler, so the body limit and
+//! the response headers are the ones a deployment serves. Ignored for the same reason
+//! the other suites are: `nix flake check` and `just test-db` supply both.
 
 #![allow(clippy::expect_used)]
 
@@ -19,13 +19,11 @@ use qr_server::cli::{Args, Command, ServeArgs};
 use serde_json::{Value, json};
 use tower::ServiceExt as _;
 
-const TOKEN: &str = "a-static-token";
-
 /// A router over a scratch database, and the database itself to count rows in.
 struct Harness {
     db: TestDb,
     router: Router,
-    // The blob root and the token file live here; dropping it takes both away.
+    // The blob root lives here; dropping it takes it away.
     _dir: tempfile::TempDir,
 }
 
@@ -45,13 +43,8 @@ async fn harness() -> Harness {
     let db = TestDb::create().await.expect("test database");
     let dir = tempfile::tempdir().expect("tempdir");
 
-    let token_file = dir.path().join("admin-token");
-    // With a trailing newline, which is what a mounted Kubernetes secret looks like.
-    std::fs::write(&token_file, format!("{TOKEN}\n")).expect("token file");
-
     let typst = std::env::var("QR_TYPST_BIN").unwrap_or_else(|_| "typst".to_owned());
     let args = serve_args(&[
-        format!("--admin-token-file={}", token_file.display()),
         format!("--typst-bin={typst}"),
         "--base-url=https://qr.shine.town".to_owned(),
     ]);
@@ -65,30 +58,24 @@ async fn harness() -> Harness {
     let state = qr_server::app::state(&args, db.store(), blobs, registry)
         .await
         .expect("state");
-    let admin = qr_server::admin::state(&args, state.clone()).expect("admin state");
+    let sheets = qr_server::sheet::routes::state(&args, state.clone()).expect("sheet state");
 
     Harness {
         db,
-        router: qr_server::app::router(state, admin),
+        router: qr_server::app::router(state, sheets),
         _dir: dir,
     }
 }
 
 impl Harness {
     /// Sends a request and returns the status, the headers and the whole body.
-    async fn post(
-        &self,
-        body: &Value,
-        token: Option<&str>,
-    ) -> (StatusCode, header::HeaderMap, Vec<u8>) {
-        let mut request = Request::builder()
+    async fn post(&self, body: &Value) -> (StatusCode, header::HeaderMap, Vec<u8>) {
+        let request = Request::builder()
             .method("POST")
-            .uri("/admin/sheets")
-            .header(header::CONTENT_TYPE, "application/json");
-        if let Some(token) = token {
-            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
-        }
-        let request = request.body(Body::from(body.to_string())).expect("request");
+            .uri("/api/v1/sheets")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .expect("request");
 
         let response = self
             .router
@@ -131,9 +118,7 @@ fn header(headers: &header::HeaderMap, name: header::HeaderName) -> String {
 #[ignore = "needs a database and typst"]
 async fn a_sheet_is_minted_and_answered_with_the_pdf() {
     let h = harness().await;
-    let (status, headers, body) = h
-        .post(&json!({ "preset": "plain", "count": 3 }), Some(TOKEN))
-        .await;
+    let (status, headers, body) = h.post(&json!({ "preset": "plain", "count": 3 })).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(header(&headers, header::CONTENT_TYPE), "application/pdf");
@@ -155,11 +140,25 @@ async fn a_sheet_is_minted_and_answered_with_the_pdf() {
     assert_eq!(h.codes().await, 3);
 }
 
+/// The contract this route is served on: a request carrying nothing at all mints. Every
+/// code it mints is new and has a secret of its own, so the sheet grants its caller
+/// nothing over any code that already exists.
+#[tokio::test]
+#[ignore = "needs a database and typst"]
+async fn a_request_carrying_nothing_mints_a_sheet() {
+    let h = harness().await;
+    let (status, _, body) = h.post(&json!({ "preset": "plain", "count": 2 })).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(body.starts_with(b"%PDF"), "not a PDF: {:?}", &body[..8]);
+    assert_eq!(h.codes().await, 2);
+}
+
 #[tokio::test]
 #[ignore = "needs a database and typst"]
 async fn an_omitted_count_fills_one_sheet_of_the_stock() {
     let h = harness().await;
-    let (status, _, _) = h.post(&json!({ "preset": "plain" }), Some(TOKEN)).await;
+    let (status, _, _) = h.post(&json!({ "preset": "plain" })).await;
 
     assert_eq!(status, StatusCode::CREATED);
     // `plain` is 4 by 3.
@@ -171,10 +170,7 @@ async fn an_omitted_count_fills_one_sheet_of_the_stock() {
 async fn a_handler_named_in_the_request_is_what_every_code_is_minted_for() {
     let h = harness().await;
     let (status, _, _) = h
-        .post(
-            &json!({ "preset": "plain", "count": 2, "handler": "photo-album" }),
-            Some(TOKEN),
-        )
+        .post(&json!({ "preset": "plain", "count": 2, "handler": "photo-album" }))
         .await;
 
     assert_eq!(status, StatusCode::CREATED);
@@ -183,31 +179,6 @@ async fn a_handler_named_in_the_request_is_what_every_code_is_minted_for() {
         .await
         .expect("handlers");
     assert_eq!(handlers, vec![Some("photo-album".to_owned()); 2]);
-}
-
-#[tokio::test]
-#[ignore = "needs a database"]
-async fn a_request_without_a_token_mints_nothing() {
-    let h = harness().await;
-    let (status, _, _) = h
-        .post(&json!({ "preset": "plain", "count": 3 }), None)
-        .await;
-
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(h.sheets().await, 0);
-    assert_eq!(h.codes().await, 0);
-}
-
-#[tokio::test]
-#[ignore = "needs a database"]
-async fn a_request_with_the_wrong_token_mints_nothing() {
-    let h = harness().await;
-    let (status, _, _) = h
-        .post(&json!({ "preset": "plain" }), Some("not-the-token"))
-        .await;
-
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(h.codes().await, 0);
 }
 
 /// Each of these is refused before the transaction opens, so a bad request costs no
@@ -224,7 +195,7 @@ async fn nothing_is_minted_for_a_request_that_cannot_be_served() {
         json!({ "preset": "plain", "count": 1001 }),
         json!({ "preset": "plain", "ec": "Z" }),
     ] {
-        let (status, _, body_out) = h.post(&body, Some(TOKEN)).await;
+        let (status, _, body_out) = h.post(&body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body} gave {status}");
         assert!(
             !body_out.is_empty(),
@@ -243,10 +214,7 @@ async fn nothing_is_minted_for_a_request_that_cannot_be_served() {
 async fn a_field_this_route_does_not_know_is_refused() {
     let h = harness().await;
     let (status, _, _) = h
-        .post(
-            &json!({ "preset": "plain", "handlr": "photo-album" }),
-            Some(TOKEN),
-        )
+        .post(&json!({ "preset": "plain", "handlr": "photo-album" }))
         .await;
 
     // axum's own rejection for JSON that parses but does not fit the shape.
@@ -254,10 +222,11 @@ async fn a_field_this_route_does_not_know_is_refused() {
     assert_eq!(h.codes().await, 0);
 }
 
-/// The route is the only one under /admin, and nothing else there should answer.
+/// Minting is the only thing this path does, and a GET of it is not a listing of what
+/// has been printed.
 #[tokio::test]
 #[ignore = "needs a database"]
-async fn the_admin_subtree_has_nothing_else_in_it() {
+async fn the_sheet_path_answers_nothing_but_a_post() {
     let h = harness().await;
     let response = h
         .router
@@ -265,8 +234,7 @@ async fn the_admin_subtree_has_nothing_else_in_it() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/admin/sheets")
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .uri("/api/v1/sheets")
                 .body(Body::empty())
                 .expect("request"),
         )
