@@ -82,8 +82,6 @@ spec:
             - --health-bind=0.0.0.0:{{ .Values.service.healthPort }}
             - --base-url={{ .Values.publicBaseUrl }}
             - --blob-root={{ .Values.persistence.mountPath }}
-            - --admin-header={{ .Values.admin.header }}
-            - --admin-session-hours={{ .Values.admin.sessionHours }}
             - --code-id-len={{ .Values.codes.idLength }}
             - --code-secret-len={{ .Values.codes.secretLength }}
             - --qr-ec-level={{ .Values.codes.errorCorrection }}
@@ -92,15 +90,6 @@ spec:
             - --max-upload-pixels={{ int64 .Values.uploads.maxPixels }}
             {{- if .Values.uploads.stripOriginalExif }}
             - --strip-original-exif
-            {{- end }}
-            {{- if .Values.admin.tokenSecret }}
-            - --admin-token-file=/run/admin-token/{{ .Values.admin.tokenSecretKey }}
-            {{- end }}
-            {{- with .Values.oidc.issuer }}
-            - --oidc-issuer={{ . }}
-            {{- end }}
-            {{- with .Values.oidc.audience }}
-            - --oidc-audience={{ . }}
             {{- end }}
             {{- range .Values.extraArgs }}
             - {{ . }}
@@ -144,11 +133,6 @@ spec:
             # stage here, and so does the sheet renderer's working directory.
             - name: tmp
               mountPath: /tmp
-            {{- if .Values.admin.tokenSecret }}
-            - name: admin-token
-              mountPath: /run/admin-token
-              readOnly: true
-            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -163,11 +147,6 @@ spec:
         {{- end }}
         - name: tmp
           emptyDir: {}
-        {{- if .Values.admin.tokenSecret }}
-        - name: admin-token
-          secret:
-            secretName: {{ .Values.admin.tokenSecret }}
-        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

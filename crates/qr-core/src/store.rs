@@ -55,37 +55,6 @@ impl Store {
             .await?;
         Ok(())
     }
-
-    /// The key that signs admin session cookies, generated on first call.
-    ///
-    /// `ON CONFLICT DO NOTHING` followed by a read rather than a check-then-insert, so
-    /// two processes starting at once agree on one key instead of racing to overwrite.
-    pub async fn signing_key(&self) -> Result<[u8; 32]> {
-        let mut fresh = [0u8; 32];
-        getrandom::fill(&mut fresh).map_err(|_| Error::Entropy)?;
-
-        let row = sqlx::query!(
-            r#"
-            WITH inserted AS (
-                INSERT INTO app_secret (id, signing_key) VALUES (1, $1)
-                ON CONFLICT (id) DO NOTHING
-                RETURNING signing_key
-            )
-            SELECT signing_key FROM inserted
-            UNION ALL
-            SELECT signing_key FROM app_secret WHERE id = 1
-            LIMIT 1
-            "#,
-            &fresh[..],
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        let stored = row.signing_key.ok_or(Error::NotFound("signing key"))?;
-        stored
-            .try_into()
-            .map_err(|_| Error::Invalid("the stored signing key is not 32 bytes".to_owned()))
-    }
 }
 
 /// What a sheet is created from.

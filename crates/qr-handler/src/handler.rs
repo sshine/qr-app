@@ -5,7 +5,7 @@ use maud::Markup;
 use qr_core::Binding;
 use sqlx::{Postgres, Transaction};
 
-use crate::{HandlerCtx, HandlerId, Viewer, state::AppState};
+use crate::{HandlerCtx, HandlerId, state::AppState};
 
 /// How a handler advertises itself on an unbound code.
 pub struct ChooserCard {
@@ -130,7 +130,6 @@ pub trait Handler: Send + Sync + 'static {
         &self,
         ctx: &HandlerCtx,
         binding: &Binding,
-        viewer: &Viewer,
     ) -> Result<serde_json::Value, HandlerError>;
 
     /// The body of `GET /c/{code}` for a code bound to this handler.
@@ -138,7 +137,6 @@ pub trait Handler: Send + Sync + 'static {
         &self,
         ctx: &HandlerCtx,
         binding: &Binding,
-        viewer: &Viewer,
     ) -> Result<HandlerPage, HandlerError>;
 
     /// Routes mounted under `/c/{code}/api/v1/h/<id>`.

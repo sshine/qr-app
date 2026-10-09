@@ -1,6 +1,6 @@
 # The application workload and nothing else: a Deployment, a Service and the volume the
-# photos live on. The database, the auth proxy and the route are the cluster's business
-# and are declared beside this release rather than by it.
+# photos live on. The database and the route are the cluster's business and are declared
+# beside this release rather than by it.
 
 image:
   repository: git.shine.town/sshine/qr
@@ -58,23 +58,6 @@ migrations:
       memory: 32Mi
     limits:
       memory: 128Mi
-
-# How admin identity reaches the application.
-#
-# The header is injected by an auth proxy in front of /admin and stripped from anything
-# arriving with it, so a request that went round the proxy has none and is refused.
-admin:
-  header: X-Forwarded-Email
-  sessionHours: 12
-  # Secret holding a bearer token for scripted calls, which have no browser to run an
-  # OIDC redirect in. Empty leaves that route unmounted.
-  tokenSecret: ""
-  tokenSecretKey: token
-
-# Validated against the Keycloak realm for calls that carry one instead of a cookie.
-oidc:
-  issuer: ""
-  audience: ""
 
 # Code geometry. These decide how large a printed symbol comes out, so they are the knobs
 # a measuring session turns; see `qr-server budget`.

@@ -21,15 +21,12 @@ axum = { workspace = true, features = [
   "tokio",
 ] }
 axum-extra = { workspace = true, features = ["cookie"] }
-base64 = { workspace = true, features = ["std"] }
-blake3 = { workspace = true, features = ["std"] }
 chrono = { workspace = true, features = ["clock", "serde", "std"] }
 maud = { workspace = true, features = ["axum"] }
 qr-core = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
-subtle = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true, features = ["serde", "std", "v7"] }

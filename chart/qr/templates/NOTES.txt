@@ -9,11 +9,6 @@ pod that never starts rather than as a half-migrated database behind the Service
 
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "qr.fullname" . }} -c migrate
 
-{{ if not .Values.admin.tokenSecret -}}
-admin.tokenSecret is unset, so the bearer-token route is not mounted and the admin API is
-reachable only from a browser session. Set it to mint codes from a script.
-{{- end }}
-
 {{ if not .Values.persistence.enabled -}}
 WARNING: persistence is off. Photos are written to the pod's filesystem and are lost the
 next time it restarts.

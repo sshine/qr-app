@@ -1,12 +1,11 @@
 //! A code that redirects, and can be repointed later.
 //!
 //! The simpler of the two handlers, and the one that exercises the parts of the trait a
-//! photo album does not: a response that is not markup, a viewer distinction, and a
-//! configuration that matters before anything has been uploaded.
+//! photo album does not: a response that is not markup, and a configuration that matters
+//! before anything has been uploaded.
 //!
-//! Anyone holding the sticker follows the redirect. Only an admin sees the editor, and
-//! the editor is at the same URL — which is the whole reason `render` is handed a
-//! viewer rather than just a binding.
+//! Scanning a code that points somewhere follows the redirect. Scanning one that points
+//! nowhere yet shows the form that sets a destination, at the same URL.
 
 mod target;
 
@@ -22,7 +21,6 @@ use maud::{Markup, html};
 use qr_core::{Binding, model::EventKind, store};
 use qr_handler::{
     AppState, ChooserCard, CodeCtx, Handler, HandlerCtx, HandlerError, HandlerId, HandlerPage,
-    RequireAdmin, Viewer,
 };
 use serde_json::json;
 
@@ -98,7 +96,6 @@ impl Handler for ForwardHandler {
         &self,
         ctx: &HandlerCtx,
         binding: &Binding,
-        viewer: &Viewer,
     ) -> Result<serde_json::Value, HandlerError> {
         let current = target::current(ctx.store().pool(), binding.id).await?;
         let follows = store::count_events(
@@ -108,43 +105,24 @@ impl Handler for ForwardHandler {
         )
         .await?;
 
-        let mut described = json!({
+        let history = target::history(ctx.store().pool(), binding.id).await?;
+
+        Ok(json!({
             "url": current.as_ref().map(|t| t.url.clone()),
             "status": current.as_ref().map(|t| t.status),
             "note": current.as_ref().and_then(|t| t.note.clone()),
             "follows": follows,
-        });
-
-        // History is only ever shown to an admin, so it is only ever fetched for one.
-        if viewer.is_admin() {
-            let history = target::history(ctx.store().pool(), binding.id).await?;
-            described["history"] = serde_json::to_value(&history).unwrap_or(json!([]));
-        }
-
-        Ok(described)
+            "history": serde_json::to_value(&history).unwrap_or(json!([])),
+        }))
     }
 
     async fn render(
         &self,
         ctx: &HandlerCtx,
         binding: &Binding,
-        viewer: &Viewer,
     ) -> Result<HandlerPage, HandlerError> {
-        let current = target::current(ctx.store().pool(), binding.id).await?;
-
-        // An admin gets the editor at the same URL an anonymous visitor is redirected
-        // from. Without this there would be no way back to a code that works.
-        if viewer.is_admin() {
-            let described = self.describe(ctx, binding, viewer).await?;
-            return Ok(HandlerPage::Markup(editor(
-                binding,
-                current.as_ref(),
-                &described,
-            )));
-        }
-
-        let Some(target) = current else {
-            return Ok(HandlerPage::Markup(unset()));
+        let Some(target) = target::current(ctx.store().pool(), binding.id).await? else {
+            return Ok(HandlerPage::Markup(editor(binding)));
         };
 
         // Counted before the redirect is sent, because nothing comes back afterwards to
@@ -196,13 +174,12 @@ async fn read_target(CodeCtx(access): CodeCtx, State(state): State<AppState>) ->
     }
 }
 
-/// Only an admin may change it.
+/// Points it somewhere else.
 ///
-/// A public code is scanned by strangers, and every one of them holds the capability by
-/// the time they have seen it. The capability is therefore not what may repoint it.
+/// The code id and its secret are the whole of what this takes. The row that supersedes
+/// the old destination records nobody, because the request carries no name to record.
 async fn write_target(
     CodeCtx(access): CodeCtx,
-    RequireAdmin(admin): RequireAdmin,
     State(state): State<AppState>,
     Json(new): Json<NewTarget>,
 ) -> Response {
@@ -215,13 +192,13 @@ async fn write_target(
 
     let result = async {
         let mut tx = state.store().begin().await?;
-        let target = target::set(&mut tx, binding.id, &new, Some(&admin.subject)).await?;
+        let target = target::set(&mut tx, binding.id, &new, None).await?;
         store::record_event(
             &mut *tx,
             EventKind::ForwardRepointed,
             Some(&access.code.id),
             Some(binding.id),
-            &json!({ "url": new.url, "by": admin.subject }),
+            &json!({ "url": new.url }),
         )
         .await?;
         tx.commit().await?;
@@ -235,11 +212,8 @@ async fn write_target(
     }
 }
 
-async fn read_history(
-    CodeCtx(access): CodeCtx,
-    RequireAdmin(_): RequireAdmin,
-    State(state): State<AppState>,
-) -> Response {
+/// Everywhere it has pointed, newest first.
+async fn read_history(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
     let Some(binding) = access.binding else {
         return (StatusCode::NOT_FOUND, "not claimed\n").into_response();
     };
@@ -257,40 +231,16 @@ fn error_response(error: &qr_core::Error) -> Response {
     (StatusCode::SERVICE_UNAVAILABLE, "try again\n").into_response()
 }
 
-/// What an anonymous visitor sees before a destination has been set.
-fn unset() -> Markup {
-    html! {
-        main class="forward unset" {
-            h1 { "Nothing here yet" }
-            p { "This code does not point anywhere. Whoever owns it can set a destination." }
-        }
-    }
-}
-
-/// The editor, shown at the same URL when an admin asks for it.
-fn editor(
-    binding: &Binding,
-    current: Option<&ForwardTarget>,
-    described: &serde_json::Value,
-) -> Markup {
-    let follows = described
-        .get("follows")
-        .and_then(serde_json::Value::as_i64)
-        .unwrap_or(0);
+/// What a scan lands on while the code still points nowhere.
+///
+/// Once a destination is set the code redirects instead and this is never rendered
+/// again. `PUT /target`, which the form here calls, is what changes it after that.
+fn editor(binding: &Binding) -> Markup {
     html! {
         main class="forward editor" x-data="forward" {
             h1 { "Link" }
             p class="code-id" { (binding.code_id.grouped()) }
-
-            @if let Some(target) = current {
-                p class="destination" {
-                    "Points at "
-                    a href=(target.url) rel="noreferrer noopener" { (target.url) }
-                }
-                p class="follows" { (follows) " scans" }
-            } @else {
-                p class="destination empty" { "No destination set." }
-            }
+            p class="destination empty" { "No destination set." }
 
             form x-ref="form" "x-on:submit.prevent"="save" class="target-form" {
                 label {

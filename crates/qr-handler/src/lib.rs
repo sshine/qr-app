@@ -4,7 +4,6 @@
 //! under its prefix. Adding a third handler is a crate that depends on this one, not an
 //! edit to the core, which is the whole reason this crate is separate from the binary.
 
-pub mod admin;
 pub mod capability;
 pub mod handler;
 pub mod id;
@@ -12,16 +11,13 @@ pub mod registry;
 pub mod routes;
 pub mod shell;
 pub mod state;
-pub mod viewer;
 
-pub use admin::{AdminConfig, AdminIdentity, AdminSource, MaybeAdmin, RequireAdmin, TokenVerifier};
 pub use capability::{CodeAccess, CodeCtx};
 pub use handler::{ChooserCard, Handler, HandlerError, HandlerPage};
 pub use id::HandlerId;
 pub use registry::{Registry, RegistryBuilder};
 pub use shell::{Page, render as render_page};
 pub use state::{AppState, CookieConfig, HandlerCtx, Limits};
-pub use viewer::Viewer;
 
 use axum::{
     Router,

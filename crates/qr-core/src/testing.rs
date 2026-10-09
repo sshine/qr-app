@@ -4,8 +4,8 @@
 //! opens transactions of its own, and wrapping it in one makes the atomicity of a claim
 //! or a bind untestable, which is most of what there is to get wrong here.
 //!
-//! Behind the `testing` feature so the admin statements below are not linked into
-//! anything that only reads and writes rows.
+//! Behind the `testing` feature so the CREATE DATABASE and DROP DATABASE statements
+//! below are not linked into anything that only reads and writes rows.
 
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection, PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
@@ -20,7 +20,7 @@ pub const URL_VAR: &str = "QR_TEST_DATABASE_URL";
 
 /// A scratch database, dropped when this goes out of scope.
 pub struct TestDb {
-    admin_url: String,
+    server_url: String,
     name: String,
     pool: Option<PgPool>,
 }
@@ -31,7 +31,7 @@ impl TestDb {
     /// Panics with instructions rather than skipping when the variable is unset. A
     /// suite that quietly runs nothing is indistinguishable from one that passes.
     pub async fn create() -> Result<Self> {
-        let admin_url = std::env::var(URL_VAR).unwrap_or_else(|_| {
+        let server_url = std::env::var(URL_VAR).unwrap_or_else(|_| {
             panic!(
                 "{URL_VAR} is not set, so the tests that need a database cannot run.\n\
                  Locally:  just db-up && {URL_VAR}=\"$DATABASE_URL\" just test-db\n\
@@ -47,11 +47,11 @@ impl TestDb {
         debug_assert!(name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'));
 
         let create = format!(r#"CREATE DATABASE "{name}""#);
-        let mut admin = PgConnection::connect(&admin_url).await?;
+        let mut server = PgConnection::connect(&server_url).await?;
         sqlx::raw_sql(AssertSqlSafe(create))
-            .execute(&mut admin)
+            .execute(&mut server)
             .await?;
-        admin.close().await?;
+        server.close().await?;
 
         // A handful of connections, not sqlx's default ten. The suite runs its tests in
         // parallel and each one takes a database of its own, so the default multiplied
@@ -60,12 +60,12 @@ impl TestDb {
         let pool = PgPoolOptions::new()
             .max_connections(4)
             .min_connections(0)
-            .connect(&swap_database(&admin_url, &name)?)
+            .connect(&swap_database(&server_url, &name)?)
             .await?;
         Store::new(pool.clone()).migrate().await?;
 
         Ok(Self {
-            admin_url,
+            server_url,
             name,
             pool: Some(pool),
         })
@@ -97,7 +97,7 @@ impl Drop for TestDb {
         // DROP DATABASE ... WITH (FORCE) evicts whatever backends are left instead.
         drop(pool);
 
-        let admin_url = self.admin_url.clone();
+        let server_url = self.server_url.clone();
         let name = self.name.clone();
 
         // A thread with a runtime of its own, because Drop is not async and the test's
@@ -112,11 +112,11 @@ impl Drop for TestDb {
             };
             rt.block_on(async move {
                 let drop_db = format!(r#"DROP DATABASE IF EXISTS "{name}" WITH (FORCE)"#);
-                if let Ok(mut admin) = PgConnection::connect(&admin_url).await {
+                if let Ok(mut server) = PgConnection::connect(&server_url).await {
                     let _ = sqlx::raw_sql(AssertSqlSafe(drop_db))
-                        .execute(&mut admin)
+                        .execute(&mut server)
                         .await;
-                    let _ = admin.close().await;
+                    let _ = server.close().await;
                 }
             });
         })

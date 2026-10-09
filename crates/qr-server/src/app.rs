@@ -12,7 +12,7 @@ use axum::{
 use maud::html;
 use qr_core::{BaseUrl, BlobStore, CodeId, Secret, Store};
 use qr_handler::{
-    AdminConfig, AppState, CookieConfig, Limits, Registry, capability,
+    AppState, CookieConfig, Limits, Registry, capability,
     shell::{self, Page},
 };
 use serde::Deserialize;
@@ -91,32 +91,6 @@ pub async fn state(
 ) -> Result<AppState, crate::StartupError> {
     let base = BaseUrl::parse(&args.base_url).map_err(crate::StartupError::BaseUrl)?;
 
-    let admin_token = match &args.admin_token_file {
-        None => None,
-        Some(path) => Some(
-            std::fs::read_to_string(path)
-                .map_err(|source| crate::StartupError::AdminToken {
-                    path: path.clone(),
-                    source,
-                })?
-                .trim()
-                .to_owned(),
-        ),
-    };
-
-    let admin = AdminConfig {
-        header: args.admin_header.clone(),
-        // Generated on first start and kept in the database, so it survives a restart
-        // and rotates with one DELETE.
-        key: store
-            .signing_key()
-            .await
-            .map_err(crate::StartupError::Core)?,
-        session_secs: u64::from(args.admin_session_hours) * 3600,
-        static_token: admin_token.filter(|t| !t.is_empty()),
-        verifier: None,
-    };
-
     Ok(AppState::new(
         store,
         blobs,
@@ -131,7 +105,6 @@ pub async fn state(
             max_upload_pixels: args.max_upload_pixels,
             strip_original_exif: args.strip_original_exif,
         },
-        admin,
     ))
 }
 

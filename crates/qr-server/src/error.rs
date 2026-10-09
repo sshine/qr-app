@@ -40,13 +40,6 @@ pub enum StartupError {
     #[error("two handlers claim the same id: {0}")]
     Registry(String),
 
-    #[error("could not read the admin token from {}", path.display())]
-    AdminToken {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-
     #[error(
         "--insecure-cookies drops the Secure flag from the capability cookie, so it is \
          refused unless --bind is loopback; it is {addr}"

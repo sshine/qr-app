@@ -13,11 +13,9 @@ use serde_json::json;
 
 use crate::{
     HandlerPage,
-    admin::MaybeAdmin,
     capability::{self, CodeCtx},
     shell::{self, Page},
     state::AppState,
-    viewer::Viewer,
 };
 
 /// Everything a handler failure turns into.
@@ -53,7 +51,6 @@ fn store_response(error: &qr_core::Error) -> Response {
 pub async fn landing(
     State(state): State<AppState>,
     Path(raw): Path<String>,
-    MaybeAdmin(admin): MaybeAdmin,
     headers: HeaderMap,
 ) -> Response {
     let Ok(code_id) = CodeId::parse(&raw) else {
@@ -63,8 +60,6 @@ pub async fn landing(
     let Some(access) = capability::resolve(&state, &code_id, &headers).await else {
         return bootstrap(code_id.as_str());
     };
-
-    let viewer = Viewer { admin };
 
     let binding = match ensure_binding(&state, &access.code, access.binding).await {
         Ok(binding) => binding,
@@ -91,12 +86,12 @@ pub async fn landing(
     };
 
     let ctx = state.handler_ctx();
-    match handler.render(&ctx, &binding, &viewer).await {
+    match handler.render(&ctx, &binding).await {
         Err(error) => handler_response(&error),
         Ok(HandlerPage::Response(response)) => response,
         Ok(HandlerPage::Markup(body)) => {
             let described = handler
-                .describe(&ctx, &binding, &viewer)
+                .describe(&ctx, &binding)
                 .await
                 .unwrap_or_else(|_| json!({}));
             shell::render(
@@ -110,7 +105,6 @@ pub async fn landing(
                 .with_state(json!({
                     "code": code_id.as_str(),
                     "handler": binding.handler_id,
-                    "admin": viewer.is_admin(),
                     "state": described,
                 }))
                 .with_head(handler.head()),
@@ -402,12 +396,7 @@ pub async fn release(CodeCtx(access): CodeCtx, State(state): State<AppState>) ->
 }
 
 /// `GET /c/{code}/api/v1/state` — the same payload the page hydrates from.
-pub async fn code_state(
-    CodeCtx(access): CodeCtx,
-    State(state): State<AppState>,
-    MaybeAdmin(admin): MaybeAdmin,
-) -> Response {
-    let viewer = Viewer { admin };
+pub async fn code_state(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
     let Some(binding) = access.binding else {
         return Json(json!({
             "code": access.code.id.as_str(),
@@ -424,16 +413,12 @@ pub async fn code_state(
         return (StatusCode::NOT_IMPLEMENTED, "unknown handler\n").into_response();
     };
 
-    match handler
-        .describe(&state.handler_ctx(), &binding, &viewer)
-        .await
-    {
+    match handler.describe(&state.handler_ctx(), &binding).await {
         Ok(described) => Json(json!({
             "code": access.code.id.as_str(),
             "bound": true,
             "handler": binding.handler_id,
             "title": binding.title,
-            "admin": viewer.is_admin(),
             "state": described,
         }))
         .into_response(),

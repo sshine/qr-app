@@ -21,7 +21,6 @@ use maud::{Markup, html};
 use qr_core::{Binding, BlobKey, model::EventKind, store as core_store};
 use qr_handler::{
     AppState, ChooserCard, CodeCtx, Handler, HandlerCtx, HandlerError, HandlerId, HandlerPage,
-    Viewer,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -58,7 +57,6 @@ impl Handler for PhotoAlbum {
         &self,
         ctx: &HandlerCtx,
         binding: &Binding,
-        _viewer: &Viewer,
     ) -> Result<serde_json::Value, HandlerError> {
         let photos = store::list(ctx.store().pool(), binding.id, None, PAGE).await?;
         let total = store::count(ctx.store().pool(), binding.id).await?;
@@ -74,10 +72,9 @@ impl Handler for PhotoAlbum {
         &self,
         ctx: &HandlerCtx,
         binding: &Binding,
-        viewer: &Viewer,
     ) -> Result<HandlerPage, HandlerError> {
         let photos = store::list(ctx.store().pool(), binding.id, None, PAGE).await?;
-        Ok(HandlerPage::Markup(album(binding, &photos, viewer)))
+        Ok(HandlerPage::Markup(album(binding, &photos)))
     }
 
     fn routes(&self) -> Router<AppState> {
@@ -514,7 +511,7 @@ fn insert_header(headers: &mut axum::http::HeaderMap, name: header::HeaderName, 
 /// Every control here is a form that works without script. The Alpine component on top
 /// of it submits the camera's output without a second tap, shows the new photo before
 /// the upload finishes, and turns a delete into an undo.
-fn album(binding: &Binding, photos: &[Photo], _viewer: &Viewer) -> Markup {
+fn album(binding: &Binding, photos: &[Photo]) -> Markup {
     let code = &binding.code_id;
     let upload_action = format!("/c/{code}/api/v1/h/photo-album/photos");
 

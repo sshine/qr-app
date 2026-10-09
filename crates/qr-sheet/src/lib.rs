@@ -1,7 +1,7 @@
 //! A4 sticker sheets of QR codes.
 //!
 //! The codes come in already generated; nothing here touches a database. That is what
-//! lets the sheet path be exercised from a test, from the CLI and from the admin API
+//! lets the sheet path be exercised from a test, from the CLI and over HTTP
 //! without three copies of the layout arithmetic.
 
 pub mod error;

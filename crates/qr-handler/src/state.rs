@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::FromRef;
 use qr_core::{BaseUrl, BlobStore, Store};
 
-use crate::{admin::AdminConfig, registry::Registry};
+use crate::registry::Registry;
 
 /// Limits a handler has to respect, in one place so two handlers cannot disagree.
 #[derive(Debug, Clone, Copy)]
@@ -27,8 +26,7 @@ pub struct CookieConfig {
 /// What a handler is given: the database, the blobs and the rules.
 ///
 /// Deliberately not the whole `AppState`. A handler has no business reaching the
-/// registry or the admin configuration, and not handing them over is cheaper than
-/// saying so.
+/// registry, and not handing it over is cheaper than saying so.
 #[derive(Clone)]
 pub struct HandlerCtx {
     store: Store,
@@ -62,7 +60,6 @@ struct Inner {
     base: BaseUrl,
     cookies: CookieConfig,
     limits: Limits,
-    admin: AdminConfig,
 }
 
 #[derive(Clone)]
@@ -76,7 +73,6 @@ impl AppState {
         base: BaseUrl,
         cookies: CookieConfig,
         limits: Limits,
-        admin: AdminConfig,
     ) -> Self {
         Self(Arc::new(Inner {
             store,
@@ -85,7 +81,6 @@ impl AppState {
             base,
             cookies,
             limits,
-            admin,
         }))
     }
 
@@ -113,10 +108,6 @@ impl AppState {
         self.0.limits
     }
 
-    pub fn admin(&self) -> &AdminConfig {
-        &self.0.admin
-    }
-
     /// The narrower view a handler gets.
     pub fn handler_ctx(&self) -> HandlerCtx {
         HandlerCtx {
@@ -125,11 +116,5 @@ impl AppState {
             base: self.0.base.clone(),
             limits: self.0.limits,
         }
-    }
-}
-
-impl FromRef<AppState> for AdminConfig {
-    fn from_ref(state: &AppState) -> Self {
-        state.0.admin.clone()
     }
 }

@@ -38,18 +38,6 @@ async fn one_code(db: &TestDb) -> (CodeId, Secret) {
 
 #[tokio::test]
 #[ignore = "needs a database"]
-async fn the_signing_key_is_generated_once_and_then_kept() {
-    let db = db().await;
-    let store = db.store();
-
-    let first = store.signing_key().await.expect("first");
-    let second = store.signing_key().await.expect("second");
-    assert_eq!(first, second, "a restart would invalidate every session");
-    assert_ne!(first, [0u8; 32]);
-}
-
-#[tokio::test]
-#[ignore = "needs a database"]
 async fn minting_gives_distinct_ids_and_secrets_that_verify() {
     let db = db().await;
     let mut conn = db.pool().acquire().await.expect("connection");

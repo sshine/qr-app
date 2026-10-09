@@ -144,26 +144,6 @@ pub struct ServeArgs {
     #[arg(long, env = "QR_DATA_DIR", default_value = "/data")]
     pub blob_root: PathBuf,
 
-    /// The header an authenticating proxy injects, and strips from anything arriving
-    /// with it, so a request that went round the proxy carries none.
-    #[arg(long, env = "QR_ADMIN_HEADER", default_value = "X-Forwarded-Email")]
-    pub admin_header: String,
-
-    #[arg(long, env = "QR_ADMIN_SESSION_HOURS", default_value_t = 12)]
-    pub admin_session_hours: u32,
-
-    /// A file holding a bearer token for scripted calls, which have no browser to run an
-    /// OIDC redirect in. Absent leaves that route unmounted rather than open.
-    #[arg(long, env = "QR_ADMIN_TOKEN_FILE")]
-    pub admin_token_file: Option<PathBuf>,
-
-    /// The realm whose tokens are accepted on the admin API.
-    #[arg(long, env = "QR_OIDC_ISSUER")]
-    pub oidc_issuer: Option<String>,
-
-    #[arg(long, env = "QR_OIDC_AUDIENCE")]
-    pub oidc_audience: Option<String>,
-
     #[arg(long, env = "QR_MAX_UPLOAD_BYTES", default_value_t = 26_214_400)]
     pub max_upload_bytes: usize,
 
@@ -187,7 +167,7 @@ pub struct ServeArgs {
     #[arg(long, env = "QR_PRESETS_FILE")]
     pub presets_file: Option<PathBuf>,
 
-    /// Sheets rendered at once on the admin API.
+    /// Sheets rendered at once.
     ///
     /// Each one forks typst, which peaks around 31MB resident and holds a core for about
     /// a tenth of a second. Two at a time leaves the pod's memory ceiling to the photo
@@ -347,8 +327,6 @@ mod tests {
             "--health-bind=0.0.0.0:9090",
             "--base-url=https://qr.shine.town",
             "--blob-root=/data",
-            "--admin-header=X-Forwarded-Email",
-            "--admin-session-hours=12",
             "--code-id-len=10",
             "--code-secret-len=16",
             "--qr-ec-level=Q",
