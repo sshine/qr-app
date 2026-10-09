@@ -19,6 +19,10 @@
 #let caption(c) = {
   text(size: data.caption_pt * 1pt, weight: "bold")[#c.label]
   if L.print_secret {
+    // Where first, then what: a reader who cannot scan needs the address before the
+    // characters mean anything.
+    linebreak()
+    text(size: data.secret_pt * 1pt, fill: luma(45%))[#data.host]
     for line in c.secret_lines {
       linebreak()
       text(size: data.secret_pt * 1pt, fill: luma(35%))[#line]

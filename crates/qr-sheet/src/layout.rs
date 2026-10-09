@@ -284,10 +284,12 @@ mod tests {
     /// What a default-length redeem URL encodes to; pinned by crate::qr.
     const MODULES: usize = 33;
 
-    /// "ABCD EFGH IJ" — a ten-character id grouped in fours, which is the longest line
-    /// a caption holds, since the secret is broken across two.
-    const LONGEST: usize = 12;
-    const SECRET_LINES: usize = 2;
+    /// The longest line a caption holds: "qr.shine.town", which beats both the grouped
+    /// ten-character id and either half of the secret.
+    const LONGEST: usize = 13;
+
+    /// The host, then the secret across two lines.
+    const SECRET_LINES: usize = 3;
 
     fn presets() -> Presets {
         Presets::builtin().expect("builtin presets parse")

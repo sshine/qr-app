@@ -36,6 +36,10 @@ struct Document<'a> {
     layout: &'a Layout,
     preset: &'a str,
     qr_box_mm: f32,
+    /// Where to type what is printed below. Without it the sticker says what to enter
+    /// and not where, and on die-cut stock the footer that might have said so stays
+    /// behind on the backing sheet.
+    host: String,
     caption_pt: f32,
     secret_pt: f32,
     rule_gap_mm: f32,
@@ -119,31 +123,39 @@ impl SheetRenderer {
             });
         }
 
+        let host = typed_host(&request.base);
+
         // The longest line the caption has to hold, measured off what was actually
         // generated rather than assumed from the default lengths, because the id length
-        // is configurable and the type size is fitted to it.
+        // is configurable and the type size is fitted to it. The host counts too: it is
+        // usually the longest line on the sticker.
+        let printed_secret_lines = if request.layout.print_secret {
+            SECRET_LINES
+        } else {
+            0
+        };
         let longest = entries
             .iter()
             .flat_map(|e| {
                 std::iter::once(e.label.chars().count())
                     .chain(e.secret_lines.iter().map(|l| l.chars().count()))
             })
+            .chain((printed_secret_lines > 0).then(|| host.chars().count()))
             .max()
             .unwrap_or(1);
-        let printed_secret_lines = if request.layout.print_secret {
-            SECRET_LINES
-        } else {
-            0
-        };
 
+        // The host is one more line to fit, on the same switch as the secret: both
+        // exist for the visitor whose camera has failed them.
+        let caption_lines = printed_secret_lines + usize::from(printed_secret_lines > 0);
         request
             .layout
-            .validate(&request.preset, modules, longest, printed_secret_lines)?;
+            .validate(&request.preset, modules, longest, caption_lines)?;
 
         let document = Document {
             layout: &request.layout,
             preset: &request.preset,
             qr_box_mm: request.layout.qr_box_mm(modules),
+            host: host.clone(),
             caption_pt: request.layout.caption_pt(modules, longest),
             secret_pt: request.layout.secret_pt(modules, longest),
             rule_gap_mm: crate::layout::RULE_GAP_MM,
@@ -167,6 +179,7 @@ impl SheetRenderer {
             layout,
             preset,
             qr_box_mm: 0.0,
+            host: String::new(),
             caption_pt: 7.0,
             secret_pt: 6.0,
             rule_gap_mm: 0.0,
@@ -239,6 +252,18 @@ impl SheetRenderer {
             source,
         })
     }
+}
+
+/// The host a person types when the QR will not scan, without the scheme.
+///
+/// Lowercase and bare: it is read by a human rather than encoded, nothing about `https`
+/// helps them, and every character saved is type size kept on a narrow label.
+fn typed_host(base: &BaseUrl) -> String {
+    base.as_str()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_owned()
 }
 
 fn write(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
