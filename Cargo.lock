@@ -2110,7 +2110,7 @@ checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
 name = "qr-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2133,7 +2133,7 @@ dependencies = [
 
 [[package]]
 name = "qr-forward"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2153,7 +2153,7 @@ dependencies = [
 
 [[package]]
 name = "qr-handler"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2172,7 +2172,7 @@ dependencies = [
 
 [[package]]
 name = "qr-photos"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2195,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "qr-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2230,7 +2230,7 @@ dependencies = [
 
 [[package]]
 name = "qr-sheet"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "qr-core",

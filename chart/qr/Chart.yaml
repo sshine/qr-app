@@ -6,8 +6,8 @@ type: application
 # The chart version and the binary move together here, because appVersion is the default
 # for image.tag and so has to name a tag the release actually publishes. Publishing is a
 # git tag of the same version.
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.1.1
+appVersion: "0.1.1"
 
 home: https://qr.shine.town
 sources:

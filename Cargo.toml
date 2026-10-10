@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -13,11 +13,11 @@ homepage = "https://qr.shine.town"
 # Versions live here and the crates inherit them; feature sets stay with the crate that
 # needs them, since those are what differ between members.
 [workspace.dependencies]
-qr-core = { version = "0.1.0", path = "crates/qr-core" }
-qr-handler = { version = "0.1.0", path = "crates/qr-handler" }
-qr-photos = { version = "0.1.0", path = "crates/qr-photos" }
-qr-forward = { version = "0.1.0", path = "crates/qr-forward" }
-qr-sheet = { version = "0.1.0", path = "crates/qr-sheet" }
+qr-core = { version = "0.1.1", path = "crates/qr-core" }
+qr-handler = { version = "0.1.1", path = "crates/qr-handler" }
+qr-photos = { version = "0.1.1", path = "crates/qr-photos" }
+qr-forward = { version = "0.1.1", path = "crates/qr-forward" }
+qr-sheet = { version = "0.1.1", path = "crates/qr-sheet" }
 
 async-trait = "0.1.92"
 axum = { version = "0.8.9", default-features = false }
