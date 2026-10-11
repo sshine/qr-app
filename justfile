@@ -232,3 +232,36 @@ chart-push: chart-package
 clean:
     cargo clean
     rm -rf dist image image.tar.gz
+
+# --- end-to-end -----------------------------------------------------------------
+
+# The server the e2e suite drives. Playwright starts this itself; run it by hand
+# only to poke at a throwaway instance.
+#
+# A database per run, dropped on exit: the suite mints codes, and a code id once
+# minted is spent, so a leftover database would have the next run asserting against
+# rows it did not create. The seeded codes are written where the specs read them,
+# because a code's plaintext secret exists nowhere else once it has been hashed.
+serve-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just db-up >/dev/null
+    db="qr_e2e_$(date +%s)_$$"
+    createdb -h 127.0.0.1 -p {{ pgport }} -U postgres --owner qr "$db"
+    trap 'dropdb -h 127.0.0.1 -p {{ pgport }} -U postgres --if-exists --force "$db" || true' EXIT
+    export QR_DATABASE_URL="postgres://qr:qr@127.0.0.1:{{ pgport }}/$db"
+    export QR_DATA_DIR="$(mktemp -d -t qr-e2e-XXXXXXXX)"
+    trap 'rm -rf "$QR_DATA_DIR"; dropdb -h 127.0.0.1 -p {{ pgport }} -U postgres --if-exists --force "$db" || true' EXIT
+    cargo run -q -p qr-server -- migrate
+    mkdir -p e2e/fixtures
+    cargo run -q -p qr-server --example mint -- 3 > e2e/fixtures/codes.json
+    exec cargo run -q -p qr-server -- serve \
+      --bind 127.0.0.1:8081 --health-bind 127.0.0.1:9091 \
+      --base-url http://127.0.0.1:8081 --insecure-cookies
+
+# End-to-end suite.
+#
+#     just e2e --ui           (needs `nix develop .#headed`)
+#     just e2e -g "bootstrap"
+e2e *args:
+    playwright test --config e2e/playwright.config.ts {{ args }}

@@ -115,3 +115,45 @@ async fn a_shouted_url_that_is_not_a_code_still_answers() {
     let (status, _) = get(&router, "/C/X").await;
     assert_eq!(status, StatusCode::OK);
 }
+
+/// The bootstrap page has to hand itself to Alpine, or the exchange never runs.
+///
+/// Alpine only instantiates a component where the markup carries `x-data`. The page
+/// defines `Alpine.data("bootstrap", ...)`, whose `init` reads the fragment and redeems
+/// it, and a visitor whose markup lacks the attribute is left looking at the typed form
+/// with their secret sitting unused in the address bar.
+#[tokio::test]
+#[ignore = "needs a database"]
+async fn the_bootstrap_page_starts_the_exchange() {
+    let db = TestDb::create().await.expect("test database");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let router = router(&db, &dir).await;
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/c/{CODE}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let html = String::from_utf8_lossy(&body);
+
+    assert!(
+        html.contains("class=\"bootstrap\""),
+        "not the bootstrap page"
+    );
+    assert!(
+        html.contains("x-data=\"bootstrap\""),
+        "the bootstrap page does not start its Alpine component, so the fragment is \
+         never exchanged:\n{html}"
+    );
+}

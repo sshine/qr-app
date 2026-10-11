@@ -214,7 +214,7 @@ fn bootstrap(code: &str) -> Response {
         Page::new(
             "Opening",
             html! {
-                main class="bootstrap" {
+                main class="bootstrap" x-data="bootstrap" {
                     h1 { "Opening this code" }
                     p class="only-with-script" { "One moment." }
                     noscript {

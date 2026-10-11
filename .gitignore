@@ -36,3 +36,15 @@
 # Agentic
 .claude/*
 !.claude/skills/
+!.claude/agents/
+
+# Accessibility snapshots the MCP server writes beside wherever it was started
+.playwright-mcp/
+
+# End-to-end run artifacts and the codes `just serve-e2e` mints for the suite
+/e2e/test-results/
+/e2e/playwright-report/
+/e2e/fixtures/
+
+# walltime run history
+/.walltime.jsonl

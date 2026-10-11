@@ -76,8 +76,12 @@ pub fn render(page: Page) -> Markup {
             body {
                 (page.body)
                 script type="application/json" id=(STATE_ID) { (json_script(&page.state)) }
-                script src="/assets/alpine.js" defer {}
+                // app.js first: it registers every Alpine.data component from an
+                // alpine:init listener, and deferred scripts run in document order, so
+                // Alpine starting first would fire that event before anything is
+                // listening and leave every x-data naming an undefined component.
                 script src="/assets/app.js" defer {}
+                script src="/assets/alpine.js" defer {}
             }
         }
     }
