@@ -43,6 +43,25 @@ doc *args='':
 lock-check:
     cargo metadata --locked --format-version 1 > /dev/null
 
+# Regenerate Cargo.nix from the manifests (crate2nix builds one derivation per crate)
+crate2nix:
+    crate2nix generate
+
+# Verify Cargo.nix is in step with the manifests
+#
+# Committed rather than generated at evaluation time, which is the trade this workspace
+# makes at 400-odd dependencies: evaluation stays fast and the file is reviewable, at the
+# cost of a regeneration step that this check is what catches.
+crate2nix-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    before=$(sha256sum Cargo.nix)
+    crate2nix generate >/dev/null
+    if [ "$before" != "$(sha256sum Cargo.nix)" ]; then
+      echo "Cargo.nix is out of step with Cargo.toml/Cargo.lock; run \`just crate2nix\`" >&2
+      exit 1
+    fi
+
 # This is the check nix/_package.nix performs by having no database at all; here it costs
 # an incremental cargo check instead of a full build.
 
@@ -51,7 +70,7 @@ sqlx-check:
     SQLX_OFFLINE=true cargo check --workspace --all-targets
 
 # Run CI checks locally
-ci: fmt-check lint sqlx-check test doc build lock-check
+ci: fmt-check lint sqlx-check test doc build lock-check crate2nix-check
     @echo "All CI checks passed!"
 
 # --- local database -----------------------------------------------------------

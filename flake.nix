@@ -28,6 +28,11 @@
       inputs.import-tree.follows = "import-tree";
     };
 
+    crate2nix = {
+      url = "github:nix-community/crate2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     import-tree.url = "github:vic/import-tree";
   };
 

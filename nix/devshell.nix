@@ -5,6 +5,7 @@
     {
       config,
       pkgs,
+      system,
       ...
     }:
     {
@@ -17,6 +18,10 @@
           withChromium = false;
         })
       ];
+
+      # Regenerates Cargo.nix; see `just crate2nix`. Pinned by this flake rather than
+      # fetched ad hoc, so the generator and the committed file cannot disagree.
+      devshells.default.packages = [ inputs.crate2nix.packages.${system}.default ];
 
       # Helm and nothing else. The release workflow pushes the chart from here so an
       # empty-store runner does not fetch a Rust toolchain to run `helm push`.
