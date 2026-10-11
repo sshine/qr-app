@@ -544,23 +544,46 @@ fn album(binding: &Binding, photos: &[Photo]) -> Markup {
                 }
             }
 
-            @if photos.is_empty() {
-                p class="empty" { "Nothing photographed yet." }
+            // The component owns this grid, so an upload or a delete shows without a
+            // round trip; `pending` is the tile drawn from the local file while the
+            // bytes are still going the other way. A visitor without script gets the
+            // server-rendered copy below instead, where every control is a form.
+            ul class="grid" {
+                template "x-for"="photo in pending" ":key"="photo.id" {
+                    li class="tile pending" {
+                        img "x-bind:src"="photo.url" alt="";
+                    }
+                }
+                template "x-for"="photo in photos" ":key"="photo.id" {
+                    li class="tile" {
+                        a "x-bind:href"="photo.view" {
+                            img "x-bind:src"="photo.thumb" loading="lazy" decoding="async"
+                                alt="a photo of the contents";
+                        }
+                        button type="button" class="tile-delete" aria-label="Delete"
+                            "x-bind:data-photo"="photo.id" "x-on:click"="remove" { "×" }
+                    }
+                }
             }
 
-            ul class="grid" {
-                @for photo in photos {
-                    li class="tile" {
-                        a href=(media_url(code, photo.id, "view")) {
-                            img src=(media_url(code, photo.id, "thumb"))
-                                width=(photo.width) height=(photo.height)
-                                loading="lazy" decoding="async"
-                                alt=(photo.caption.as_deref().unwrap_or("a photo of the contents"));
-                        }
-                        form method="post"
-                            action={ (media_url(code, photo.id, "")) "delete" }
-                            class="tile-delete" {
-                            button type="submit" aria-label="Delete" { "×" }
+            noscript {
+                @if photos.is_empty() {
+                    p class="empty" { "Nothing photographed yet." }
+                }
+                ul class="grid" {
+                    @for photo in photos {
+                        li class="tile" {
+                            a href=(media_url(code, photo.id, "view")) {
+                                img src=(media_url(code, photo.id, "thumb"))
+                                    width=(photo.width) height=(photo.height)
+                                    loading="lazy" decoding="async"
+                                    alt=(photo.caption.as_deref().unwrap_or("a photo of the contents"));
+                            }
+                            form method="post"
+                                action={ (media_url(code, photo.id, "")) "delete" }
+                                class="tile-delete" {
+                                button type="submit" aria-label="Delete" { "×" }
+                            }
                         }
                     }
                 }

@@ -53,6 +53,23 @@
 
   document.addEventListener("alpine:init", () => {
     // The page served before a cookie exists. Its only job is the exchange above.
+    // The landing page's list, read from this browser's own storage. The service has no
+    // idea who is asking, and a list of every code would be the inventory the whole
+    // capability scheme exists to withhold.
+    Alpine.data("recent", () => ({
+      codes: [],
+
+      init() {
+        try {
+          const seen =
+            JSON.parse(localStorage.getItem("qr.recent") ?? "[]") ?? [];
+          this.codes = seen.map((code) => ({ code, href: `/c/${code}` }));
+        } catch {
+          // Storage off, or cleared. An empty list is the right answer.
+        }
+      },
+    }));
+
     Alpine.data("bootstrap", () => ({
       async init() {
         document.querySelectorAll(".only-with-script").forEach((el) => {

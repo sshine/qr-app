@@ -126,8 +126,8 @@ async fn landing() -> Response {
                         section {
                             h2 { "Opened recently" }
                             ul class="cards" {
-                                template "x-for"="code in codes" {
-                                    li { a "x-bind:href"="href" x-text="code" {} }
+                                template "x-for"="item in codes" ":key"="item.code" {
+                                    li { a "x-bind:href"="item.href" x-text="item.code" {} }
                                 }
                             }
                         }
