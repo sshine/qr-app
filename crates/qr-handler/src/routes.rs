@@ -183,6 +183,32 @@ async fn bind(
 /// Its script reads `location.hash`, exchanges it for a cookie and replaces the history
 /// entry so the secret never stays in the address bar. Without script it is the typed
 /// form, which is also the damaged-sticker path and the reason the secret is printed.
+/// `GET /C/{code}` — where a scanned sticker actually lands.
+///
+/// A QR encodes the whole URL uppercase, because alphanumeric mode has no lowercase and
+/// byte mode would cost a version on every sticker. A browser lowercases the scheme and
+/// the host on its own but leaves the path alone, so a scan arrives here rather than at
+/// the route above.
+///
+/// Redirected rather than served from both spellings: the page's script rewrites the
+/// address to `location.pathname` once it has redeemed, then reloads it, so the address
+/// a visitor arrives at has to be the one the router answers.
+///
+/// The secret is in the fragment, which a browser reapplies to the destination of a
+/// redirect that carries none of its own, so nothing is lost on the way.
+pub async fn shouted(Path(raw): Path<String>) -> Response {
+    let Ok(code) = CodeId::parse(&raw) else {
+        // Nothing to normalise it to, and the typed form is the way back in.
+        return bootstrap(&raw);
+    };
+
+    (
+        StatusCode::PERMANENT_REDIRECT,
+        [(header::LOCATION, format!("/c/{code}"))],
+    )
+        .into_response()
+}
+
 fn bootstrap(code: &str) -> Response {
     shell::render(
         Page::new(

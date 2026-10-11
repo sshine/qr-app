@@ -36,6 +36,8 @@ pub fn mount(state: AppState) -> Router {
     // where the fragment is still readable, and redeem is what turns it into a cookie.
     let open = Router::new()
         .route("/c/{code}", get(routes::landing))
+        // What a scan actually requests; see routes::shouted.
+        .route("/C/{code}", get(routes::shouted))
         .route("/c/{code}/api/v1/redeem", post(routes::redeem));
 
     let mut guarded = Router::new()
