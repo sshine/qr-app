@@ -1,4 +1,4 @@
-//! `POST /api/v1/sheets`, against a real database and a real typst.
+//! `/api/v1/sheets` by both verbs, against a real database and a real typst.
 //!
 //! Driven through the assembled router rather than the handler, so the body limit and
 //! the response headers are the ones a deployment serves. Ignored for the same reason
@@ -75,6 +75,28 @@ impl Harness {
             .uri("/api/v1/sheets")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string()))
+            .expect("request");
+
+        let response = self
+            .router
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("response");
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = axum::body::to_bytes(response.into_body(), 8 * 1024 * 1024)
+            .await
+            .expect("body");
+        (status, headers, bytes.to_vec())
+    }
+
+    /// The same, asked for the way a browser asks.
+    async fn get(&self, query: &str) -> (StatusCode, header::HeaderMap, Vec<u8>) {
+        let request = Request::builder()
+            .method("GET")
+            .uri(format!("/api/v1/sheets?{query}"))
+            .body(Body::empty())
             .expect("request");
 
         let response = self
@@ -222,23 +244,62 @@ async fn a_field_this_route_does_not_know_is_refused() {
     assert_eq!(h.codes().await, 0);
 }
 
-/// Minting is the only thing this path does, and a GET of it is not a listing of what
-/// has been printed.
+/// The whole point of the GET: a link somebody can open.
+#[tokio::test]
+#[ignore = "needs a database and typst"]
+async fn a_link_mints_a_sheet_and_renders_it_in_the_browser() {
+    let h = harness().await;
+    let (status, headers, body) = h.get("preset=plain&count=3").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header(&headers, header::CONTENT_TYPE), "application/pdf");
+    assert!(body.starts_with(b"%PDF"), "not a PDF: {:?}", &body[..8]);
+
+    // Inline, not attachment: a link is opened to be looked at.
+    assert!(
+        header(&headers, header::CONTENT_DISPOSITION).starts_with("inline; filename=\"sheet-"),
+        "{}",
+        header(&headers, header::CONTENT_DISPOSITION)
+    );
+    assert_eq!(header(&headers, header::CACHE_CONTROL), "no-store");
+    assert_eq!(h.codes().await, 3);
+}
+
+/// Opening the link twice is two sheets, not the same one again. Stated here because it
+/// is the cost of minting from a GET and the thing a reader will want to know.
+#[tokio::test]
+#[ignore = "needs a database and typst"]
+async fn opening_the_link_twice_mints_twice() {
+    let h = harness().await;
+    h.get("preset=plain&count=2").await;
+    h.get("preset=plain&count=2").await;
+
+    assert_eq!(h.sheets().await, 2);
+    assert_eq!(h.codes().await, 4);
+}
+
+/// A query string is as easy to misspell as a JSON field, and costs the same sheet.
 #[tokio::test]
 #[ignore = "needs a database"]
-async fn the_sheet_path_answers_nothing_but_a_post() {
+async fn a_link_that_cannot_be_served_mints_nothing() {
     let h = harness().await;
-    let response = h
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/api/v1/sheets")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    for query in [
+        "",                             // no preset at all
+        "preset=no-such-stock",         //
+        "preset=plain&handlr=forward",  // misspelled parameter
+        "preset=plain&handler=no-such", //
+        "preset=plain&count=0",         //
+        "preset=plain&count=1001",      //
+        "preset=plain&ec=Z",            //
+    ] {
+        let (status, _, _) = h.get(query).await;
+        assert!(
+            status == StatusCode::BAD_REQUEST || status == StatusCode::UNPROCESSABLE_ENTITY,
+            "{query:?} gave {status}"
+        );
+    }
+
+    assert_eq!(h.sheets().await, 0);
+    assert_eq!(h.codes().await, 0);
 }

@@ -10,10 +10,10 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Query, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::get,
 };
 use qr_handler::AppState;
 use qr_sheet::{EcLevel, Presets, SheetRenderer};
@@ -71,15 +71,15 @@ pub fn state(args: &ServeArgs, app: AppState) -> Result<SheetState, StartupError
 /// Where minting answers.
 pub fn router(state: SheetState) -> Router {
     Router::new()
-        .route("/api/v1/sheets", post(create_sheet))
+        .route("/api/v1/sheets", get(open_sheet).post(create_sheet))
         .with_state(state)
 }
 
-/// What `POST /api/v1/sheets` accepts.
+/// What either verb accepts: a JSON body on POST, a query string on GET.
 ///
 /// Unknown fields are refused rather than ignored, because a misspelled `handler` that
 /// is quietly dropped is a sheet of codes that land on the chooser, discovered once they
-/// are on boxes.
+/// are on boxes. That holds for a mistyped query parameter too.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NewSheet {
@@ -95,12 +95,35 @@ struct NewSheet {
     ec: Option<String>,
 }
 
-/// `POST /api/v1/sheets` — mints a sheet of codes and answers with the PDF.
+/// `GET /api/v1/sheets?preset=relief-t7160&count=21` — the same sheet, from a link.
+///
+/// A GET that creates, which the method is not supposed to do. It earns the exception
+/// because the thing being asked for is a printable page and the natural way to ask for
+/// one is a URL somebody can open; without this the only way in is a shell. The price is
+/// that every load mints: opening the link twice gives two sheets of different codes, and
+/// a browser that prefetches the link has already spent one.
+///
+/// Rendered inline rather than downloaded, because a link is opened to be looked at.
+async fn open_sheet(State(state): State<SheetState>, Query(query): Query<NewSheet>) -> Response {
+    mint(&state, query, StatusCode::OK, "inline").await
+}
+
+/// `POST /api/v1/sheets` — the same, for a script that wants the bytes.
+async fn create_sheet(State(state): State<SheetState>, Json(body): Json<NewSheet>) -> Response {
+    mint(&state, body, StatusCode::CREATED, "attachment").await
+}
+
+/// Mints a sheet of codes and answers with the PDF.
 ///
 /// The bytes are the whole response and are kept nowhere. They carry every secret on the
 /// sheet in plaintext, so there is no second copy to expire, collect, or leak, and a
 /// download that was lost is reprinted by minting another sheet.
-async fn create_sheet(State(state): State<SheetState>, Json(body): Json<NewSheet>) -> Response {
+async fn mint(
+    state: &SheetState,
+    body: NewSheet,
+    success: StatusCode,
+    disposition: &str,
+) -> Response {
     let sheets = &state.sheets;
 
     let Ok(layout) = sheets.presets.get(&body.preset) else {
@@ -160,12 +183,15 @@ async fn create_sheet(State(state): State<SheetState>, Json(body): Json<NewSheet
         Ok(rendered) => {
             minted(rendered.sheet_id, count, &body);
             (
-                StatusCode::CREATED,
+                success,
                 [
                     (header::CONTENT_TYPE, "application/pdf".to_owned()),
                     (
                         header::CONTENT_DISPOSITION,
-                        format!("attachment; filename=\"sheet-{}.pdf\"", rendered.sheet_id),
+                        format!(
+                            "{disposition}; filename=\"sheet-{}.pdf\"",
+                            rendered.sheet_id
+                        ),
                     ),
                     // The response is the only copy, and it is a page of live secrets.
                     (header::CACHE_CONTROL, "no-store".to_owned()),
