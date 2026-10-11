@@ -27,8 +27,10 @@
         };
 
         "pre-push".steps = {
+          # Cargo.nix is 15k lines of crate2nix output and carries unused arguments
+          # throughout; it is regenerated, never edited, so there is nothing to act on.
           deadnix.glob = "*.nix";
-          deadnix.check = "${lib.getExe pkgs.deadnix} --fail {{files}}";
+          deadnix.check = "${lib.getExe pkgs.deadnix} --fail --exclude Cargo.nix {{files}}";
 
           clippy.check = "cargo clippy --all-targets --all-features -- -D warnings";
           lock-check.check = "cargo metadata --locked --format-version 1 > /dev/null";
