@@ -36,10 +36,11 @@ struct Document<'a> {
     layout: &'a Layout,
     preset: &'a str,
     qr_box_mm: f32,
-    /// Where to type what is printed below. Without it the sticker says what to enter
-    /// and not where, and on die-cut stock the footer that might have said so stays
-    /// behind on the backing sheet.
+    /// Where to type what is printed beside it, set on its side in its own column so
+    /// the longest run of characters on the sticker costs width rather than type size.
     host: String,
+    host_w_mm: f32,
+    host_pt: f32,
     caption_pt: f32,
     secret_pt: f32,
     rule_gap_mm: f32,
@@ -127,8 +128,9 @@ impl SheetRenderer {
 
         // The longest line the caption has to hold, measured off what was actually
         // generated rather than assumed from the default lengths, because the id length
-        // is configurable and the type size is fitted to it. The host counts too: it is
-        // usually the longest line on the sticker.
+        // is configurable and the type size is fitted to it. The host is not among them
+        // any more: it is set on its side in a column of its own, so it costs width
+        // rather than holding the type size of every other label down to its length.
         let printed_secret_lines = if request.layout.print_secret {
             SECRET_LINES
         } else {
@@ -140,13 +142,12 @@ impl SheetRenderer {
                 std::iter::once(e.label.chars().count())
                     .chain(e.secret_lines.iter().map(|l| l.chars().count()))
             })
-            .chain((printed_secret_lines > 0).then(|| host.chars().count()))
             .max()
             .unwrap_or(1);
 
-        // The host is one more line to fit, on the same switch as the secret: both
-        // exist for the visitor whose camera has failed them.
-        let caption_lines = printed_secret_lines + usize::from(printed_secret_lines > 0);
+        // Only the secret stacks under the code now; the rule between them is counted
+        // with the writing lines the layout already allows for.
+        let caption_lines = printed_secret_lines;
         request
             .layout
             .validate(&request.preset, modules, longest, caption_lines)?;
@@ -156,6 +157,8 @@ impl SheetRenderer {
             preset: &request.preset,
             qr_box_mm: request.layout.qr_box_mm(modules),
             host: host.clone(),
+            host_w_mm: request.layout.host_w_mm(),
+            host_pt: request.layout.host_pt(),
             caption_pt: request.layout.caption_pt(modules, longest),
             secret_pt: request.layout.secret_pt(modules, longest),
             rule_gap_mm: crate::layout::RULE_GAP_MM,
@@ -180,6 +183,8 @@ impl SheetRenderer {
             preset,
             qr_box_mm: 0.0,
             host: String::new(),
+            host_w_mm: 0.0,
+            host_pt: 7.0,
             caption_pt: 7.0,
             secret_pt: 6.0,
             rule_gap_mm: 0.0,

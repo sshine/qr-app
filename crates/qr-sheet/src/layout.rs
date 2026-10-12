@@ -68,6 +68,18 @@ const MAX_CAPTION_PT: f32 = 16.0;
 /// The gutter between the symbol and the caption.
 pub const CAPTION_GUTTER_MM: f32 = 1.5;
 
+/// The turned address is set at a fixed size rather than one fitted to the label.
+///
+/// Rotated, it is bounded by the label height rather than by any width, and every stock
+/// here is tall enough for it. Fixing it also keeps it out of the circle the caption
+/// sizing would otherwise be in: the column it costs decides the width the caption is
+/// fitted to, which would otherwise decide its own size.
+const HOST_PT: f32 = 5.5;
+
+/// A rotated line is as wide as its type is tall: ascender, descender, and a little
+/// either side.
+const HOST_EM: f32 = 1.5;
+
 /// Vertical space given to each ruled writing line.
 pub const RULE_GAP_MM: f32 = 3.0;
 
@@ -105,9 +117,24 @@ impl Layout {
         self.qr_mm / modules
     }
 
-    /// What is left of the label once the inset and the symbol have taken their share.
+    /// What the turned address column costs.
+    ///
+    /// Always reserved, unlike the secret: the address is where to type, and a sticker
+    /// on stock too small for the secret still wants to say where its code lives.
+    pub fn host_w_mm(&self) -> f32 {
+        HOST_PT * HOST_EM * PT_MM
+    }
+
+    /// The size the turned address is set at.
+    pub fn host_pt(&self) -> f32 {
+        HOST_PT
+    }
+
+    /// What is left of the label once the inset, the symbol and the address have taken
+    /// their share.
     pub fn caption_w_mm(&self, modules: usize) -> f32 {
-        self.label_w_mm - 2.0 * self.inset_x_mm - self.qr_box_mm(modules) - CAPTION_GUTTER_MM
+        let host = self.host_w_mm() + CAPTION_GUTTER_MM;
+        self.label_w_mm - 2.0 * self.inset_x_mm - self.qr_box_mm(modules) - CAPTION_GUTTER_MM - host
     }
 
     pub fn caption_h_mm(&self) -> f32 {
