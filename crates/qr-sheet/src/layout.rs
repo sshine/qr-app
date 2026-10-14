@@ -57,31 +57,73 @@ const MONO_ADVANCE_EM: f32 = 0.6022;
 /// A point in millimetres.
 const PT_MM: f32 = 25.4 / 72.0;
 
-/// Below this the caption stops being readable at arm's length, so a layout that would
+/// Below this the address stops being readable at arm's length, so a layout that would
 /// need smaller type is refused rather than printed.
-const MIN_CAPTION_PT: f32 = 5.5;
+const MIN_URL_PT: f32 = 5.0;
 
-/// Above this the caption competes with the symbol for attention and, on the full-sheet
-/// label, would be absurd.
-const MAX_CAPTION_PT: f32 = 16.0;
+/// Above this the address competes with the symbol for attention, and on the big stock
+/// it would take the whole box before the grid had any of it.
+const MAX_URL_PT: f32 = 9.0;
 
-/// The gutter between the symbol and the caption.
+const MIN_CELL_PT: f32 = 5.0;
+const MAX_CELL_PT: f32 = 16.0;
+
+/// The gutter between the symbol and the box beside it.
 pub const CAPTION_GUTTER_MM: f32 = 1.5;
 
-/// The turned address is set at a fixed size rather than one fitted to the label.
+/// Clearance between the box's border and the address inside it.
+pub const BOX_PAD_MM: f32 = 0.7;
+
+/// How many characters a row of the typed grid holds.
 ///
-/// Rotated, it is bounded by the label height rather than by any width, and every stock
-/// here is tall enough for it. Fixing it also keeps it out of the circle the caption
-/// sizing would otherwise be in: the column it costs decides the width the caption is
-/// fitted to, which would otherwise decide its own size.
-const HOST_PT: f32 = 5.5;
+/// Both are offered because the box is as wide as the stock leaves it: on a 63.5mm label
+/// four across gives a cell about as tall as it is wide, and on a 99.1mm one it gives
+/// four cells 15mm across holding a 6pt character.
+const GRID_COLS: [usize; 2] = [4, 8];
 
-/// A rotated line is as wide as its type is tall: ascender, descender, and a little
-/// either side.
-const HOST_EM: f32 = 1.5;
+/// A line of type occupies more than its point size: DejaVu's ascender and descender
+/// together are a little over 1.1em and typst adds leading between lines. Rounded up
+/// rather than derived, because the address is centred in the row it is given and only
+/// an estimate that comes out too small can clip.
+const LINE_EM: f32 = 1.45;
 
-/// Vertical space given to each ruled writing line.
-pub const RULE_GAP_MM: f32 = 3.0;
+/// A cell holds one character, which needs its cap height and a little air.
+const CELL_EM: f32 = 1.3;
+
+/// How much of a cell's width one character may take before the grid reads as cramped.
+const CELL_FILL: f32 = 0.72;
+
+/// What is going into the box, in the terms the arithmetic needs it.
+///
+/// Lengths rather than the strings themselves: the id length is configurable and the
+/// secret length with it, so none of the figures below can be assumed from the defaults.
+#[derive(Debug, Clone, Copy)]
+pub struct CaptionSpec {
+    /// How many lines the address is printed on.
+    pub url_lines: usize,
+    /// The longest of those lines, in characters.
+    pub longest_run: usize,
+    /// Characters in the secret, or zero when this stock does not print one.
+    pub secret_len: usize,
+}
+
+/// The box beside the symbol, in millimetres and points.
+#[derive(Debug, Clone, Copy)]
+pub struct Caption {
+    pub box_w_mm: f32,
+    pub box_h_mm: f32,
+    pub url_pt: f32,
+    /// What the address would have been set at unclamped, which is what says whether the
+    /// box is too narrow rather than merely narrow.
+    pub url_fit: f32,
+    pub header_h_mm: f32,
+    pub cols: usize,
+    pub secret_rows: usize,
+    /// Blank rows under the grid, from the stock's `label_lines`, to write on.
+    pub blank_rows: usize,
+    pub row_h_mm: f32,
+    pub cell_pt: f32,
+}
 
 /// Width of `chars` monospaced characters at `pt`.
 fn mono_width_mm(chars: usize, pt: f32) -> f32 {
@@ -117,73 +159,125 @@ impl Layout {
         self.qr_mm / modules
     }
 
-    /// What the turned address column costs.
+    /// What is left of the label once the inset and the symbol have taken their share.
+    pub fn box_w_mm(&self, modules: usize) -> f32 {
+        self.label_w_mm - 2.0 * self.inset_x_mm - self.qr_box_mm(modules) - CAPTION_GUTTER_MM
+    }
+
+    /// The box is drawn the height of the symbol rather than of the label.
     ///
-    /// Always reserved, unlike the secret: the address is where to type, and a sticker
-    /// on stock too small for the secret still wants to say where its code lives.
-    pub fn host_w_mm(&self) -> f32 {
-        HOST_PT * HOST_EM * PT_MM
-    }
-
-    /// The size the turned address is set at.
-    pub fn host_pt(&self) -> f32 {
-        HOST_PT
-    }
-
-    /// What is left of the label once the inset, the symbol and the address have taken
-    /// their share.
-    pub fn caption_w_mm(&self, modules: usize) -> f32 {
-        let host = self.host_w_mm() + CAPTION_GUTTER_MM;
-        self.label_w_mm - 2.0 * self.inset_x_mm - self.qr_box_mm(modules) - CAPTION_GUTTER_MM - host
+    /// That is the whole point of it: the symbol is centred inside its quiet zone and the
+    /// box is centred against the symbol, so the two borders land on the symbol's own top
+    /// and bottom edges and the label's height is left to the symbol alone.
+    pub fn box_h_mm(&self) -> f32 {
+        self.qr_mm
     }
 
     pub fn caption_h_mm(&self) -> f32 {
         self.label_h_mm - 2.0 * self.inset_y_mm
     }
 
-    /// Caption type size, fitted to the column rather than guessed from the label.
+    /// Everything the box comes out as, worked out once.
     ///
-    /// Scaling off the label height instead looks right on the stock it was tuned for
-    /// and overflows the one beside it, because a tall label is not necessarily a wide
-    /// one. Fitting the longest line to the column that is actually left over cannot
-    /// overflow, so the only thing left to check is the lower clamp.
-    pub fn caption_pt(&self, modules: usize, longest_line: usize) -> f32 {
-        if longest_line == 0 {
-            return MIN_CAPTION_PT;
-        }
-        let unit = mono_width_mm(longest_line, 1.0);
-        (self.caption_w_mm(modules) / unit).clamp(MIN_CAPTION_PT, MAX_CAPTION_PT)
-    }
+    /// Both the fit check and the renderer read it from here, because the two disagreeing
+    /// is a sheet that validates and then prints a grid with its last row off the bottom.
+    pub fn caption(&self, modules: usize, spec: &CaptionSpec) -> Caption {
+        let box_w_mm = self.box_w_mm(modules);
+        let box_h_mm = self.box_h_mm();
 
-    /// The secret is set smaller than the id: the id is what a human reads off the box,
-    /// the secret is what they copy only when the camera has failed them.
-    pub fn secret_pt(&self, modules: usize, longest_line: usize) -> f32 {
-        self.caption_pt(modules, longest_line) * 0.8
-    }
+        // Fitted to the longest run the address breaks into, not to the whole URL: the
+        // runs are what is printed, one to a line.
+        let unit = mono_width_mm(spec.longest_run.max(1), 1.0);
+        let url_fit = (box_w_mm - 2.0 * BOX_PAD_MM).max(0.0) / unit;
+        let url_pt = url_fit.clamp(MIN_URL_PT, MAX_URL_PT);
 
-    /// How tall the caption comes out, for the fit check.
-    fn caption_stack_mm(&self, modules: usize, longest_line: usize, secret_lines: usize) -> f32 {
-        let id = self.caption_pt(modules, longest_line) * PT_MM;
         #[expect(
             clippy::cast_precision_loss,
-            reason = "a secret is at most a handful of lines"
+            reason = "an address breaks into a handful of runs"
         )]
-        let secret_lines = secret_lines as f32;
-        let secret = self.secret_pt(modules, longest_line) * 1.25 * PT_MM * secret_lines;
-        let rules = f32::from(self.label_lines) * (RULE_GAP_MM + 0.1);
-        id + secret + rules
+        let url_lines = spec.url_lines.max(1) as f32;
+        let header_h_mm = url_lines * url_pt * LINE_EM * PT_MM + 2.0 * BOX_PAD_MM;
+
+        let blank_rows = usize::from(self.label_lines);
+        let (cols, secret_rows) =
+            self.grid_shape(box_w_mm, box_h_mm - header_h_mm, spec, blank_rows);
+
+        #[expect(clippy::cast_precision_loss, reason = "a grid is a handful of rows")]
+        let total_rows = (secret_rows + blank_rows) as f32;
+        let (row_h_mm, cell_pt) = if total_rows == 0.0 {
+            (0.0, MIN_CELL_PT)
+        } else {
+            let row_h_mm = (box_h_mm - header_h_mm) / total_rows;
+            #[expect(clippy::cast_precision_loss, reason = "four or eight")]
+            let cell_w_mm = box_w_mm / cols as f32;
+            let by_height = row_h_mm / (CELL_EM * PT_MM);
+            let by_width = cell_w_mm * CELL_FILL / (MONO_ADVANCE_EM * PT_MM);
+            (
+                row_h_mm,
+                by_height.min(by_width).clamp(MIN_CELL_PT, MAX_CELL_PT),
+            )
+        };
+
+        Caption {
+            box_w_mm,
+            box_h_mm,
+            url_pt,
+            url_fit,
+            header_h_mm,
+            cols,
+            secret_rows,
+            blank_rows,
+            row_h_mm,
+            cell_pt,
+        }
+    }
+
+    /// How many characters to put on a row, and how many rows that makes.
+    ///
+    /// Whichever of the two widths leaves a cell closest to square. The box is as wide as
+    /// the stock leaves it rather than as wide as the grid wants, so a single figure that
+    /// suits one preset leaves another with cells five times wider than they are tall.
+    fn grid_shape(
+        &self,
+        box_w_mm: f32,
+        avail_h_mm: f32,
+        spec: &CaptionSpec,
+        blank_rows: usize,
+    ) -> (usize, usize) {
+        if spec.secret_len == 0 {
+            return (GRID_COLS[0], 0);
+        }
+        let mut best = (
+            GRID_COLS[0],
+            spec.secret_len.div_ceil(GRID_COLS[0]),
+            f32::MAX,
+        );
+        for cols in GRID_COLS {
+            let rows = spec.secret_len.div_ceil(cols);
+            #[expect(clippy::cast_precision_loss, reason = "a grid is a handful of rows")]
+            let total = (rows + blank_rows) as f32;
+            #[expect(clippy::cast_precision_loss, reason = "four or eight")]
+            let cell_w = box_w_mm / cols as f32;
+            if total <= 0.0 || avail_h_mm <= 0.0 {
+                continue;
+            }
+            // Distance from square, measured in ratio rather than in millimetres so that
+            // being twice too wide and twice too tall count the same.
+            let aspect = (cell_w / (avail_h_mm / total))
+                .max(f32::MIN_POSITIVE)
+                .ln()
+                .abs();
+            if aspect < best.2 {
+                best = (cols, rows, aspect);
+            }
+        }
+        (best.0, best.1)
     }
 
     /// Refuses a layout that would print off the page, crowd the quiet zone out of a
     /// label, or clip the caption. All three produce a sheet that looks plausible on
     /// screen and wastes a sheet of stock.
-    pub fn validate(
-        &self,
-        name: &str,
-        modules: usize,
-        longest_line: usize,
-        secret_lines: usize,
-    ) -> Result<()> {
+    pub fn validate(&self, name: &str, modules: usize, spec: &CaptionSpec) -> Result<()> {
         let box_mm = self.qr_box_mm(modules);
         let quiet_mm = (box_mm - self.qr_mm) / 2.0;
 
@@ -196,20 +290,28 @@ impl Layout {
             });
         }
 
-        let caption_w = self.caption_w_mm(modules);
-        let wanted = caption_w / mono_width_mm(longest_line.max(1), 1.0);
-        if caption_w <= 0.0 || wanted < MIN_CAPTION_PT {
+        let caption = self.caption(modules, spec);
+
+        if caption.box_w_mm <= 0.0 || caption.url_fit < MIN_URL_PT {
             return Err(Error::CaptionTooWide {
                 preset: name.to_owned(),
-                caption_w_mm: caption_w,
-                needed_pt: MIN_CAPTION_PT,
+                caption_w_mm: caption.box_w_mm,
+                needed_pt: MIN_URL_PT,
             });
         }
 
-        if self.caption_stack_mm(modules, longest_line, secret_lines) > self.caption_h_mm() {
+        // The header is given what it needs and the rows divide what is left, so this
+        // fires when the address alone has taken the box, or when the rows it has to
+        // share the remainder with have shrunk the characters past reading.
+        let rows = caption.secret_rows + caption.blank_rows;
+        if caption.header_h_mm > caption.box_h_mm
+            || (rows > 0
+                && caption.cell_pt <= MIN_CELL_PT
+                && caption.row_h_mm < MIN_CELL_PT * CELL_EM * PT_MM)
+        {
             return Err(Error::CaptionTooTall {
                 preset: name.to_owned(),
-                caption_h_mm: self.caption_h_mm(),
+                caption_h_mm: caption.box_h_mm,
             });
         }
 
@@ -311,15 +413,24 @@ mod tests {
     /// What a default-length redeem URL encodes to; pinned by crate::qr.
     const MODULES: usize = 33;
 
-    /// The longest line a caption holds: "qr.shine.town", which beats both the grouped
-    /// ten-character id and either half of the secret.
-    const LONGEST: usize = 13;
+    /// The longest run the address breaks into: "qr.shine.town/c/", which beats the
+    /// ten-character id on the line under it.
+    const LONGEST: usize = 16;
 
-    /// The host, then the secret across two lines.
-    const SECRET_LINES: usize = 3;
+    /// The default secret length, which is what fills the grid.
+    const SECRET_LEN: usize = 16;
 
     fn presets() -> Presets {
         Presets::builtin().expect("builtin presets parse")
+    }
+
+    /// What the shipped defaults put in the box.
+    fn spec(layout: &Layout) -> CaptionSpec {
+        CaptionSpec {
+            url_lines: 2,
+            longest_run: LONGEST,
+            secret_len: if layout.print_secret { SECRET_LEN } else { 0 },
+        }
     }
 
     #[test]
@@ -327,11 +438,63 @@ mod tests {
         let presets = presets();
         assert!(presets.names().count() >= 8);
         for (name, layout) in presets.iter() {
-            let lines = if layout.print_secret { SECRET_LINES } else { 0 };
             layout
-                .validate(name, MODULES, LONGEST, lines)
+                .validate(name, MODULES, &spec(layout))
                 .unwrap_or_else(|e| panic!("preset {name} does not fit: {e}"));
         }
+    }
+
+    /// The property the box exists for: its border meets the symbol's edges, so the
+    /// label's height belongs to the symbol and the box takes none of it.
+    #[test]
+    fn the_box_is_drawn_the_height_of_the_symbol() {
+        for (name, layout) in presets().iter() {
+            let caption = layout.caption(MODULES, &spec(layout));
+            assert!(
+                (caption.box_h_mm - layout.qr_mm).abs() < f32::EPSILON,
+                "{name} draws the box {}mm against a {}mm symbol",
+                caption.box_h_mm,
+                layout.qr_mm
+            );
+        }
+    }
+
+    /// Rows divide what the address leaves, so this is what says the grid is drawn
+    /// inside the border rather than through it.
+    #[test]
+    fn the_rows_fill_the_box_and_no_more() {
+        for (name, layout) in presets().iter() {
+            let caption = layout.caption(MODULES, &spec(layout));
+            #[expect(clippy::cast_precision_loss, reason = "a grid is a handful of rows")]
+            let rows = (caption.secret_rows + caption.blank_rows) as f32;
+            let total = caption.header_h_mm + rows * caption.row_h_mm;
+            assert!(
+                total <= caption.box_h_mm + 0.01,
+                "{name} fills {total}mm of a {}mm box",
+                caption.box_h_mm
+            );
+        }
+    }
+
+    /// Four across on narrow stock, eight on wide: a fixed figure leaves one preset with
+    /// cells five times wider than they are tall.
+    #[test]
+    fn the_grid_is_as_wide_as_keeps_its_cells_nearest_square() {
+        let presets = presets();
+        let narrow = presets.get("relief-t7160").expect("t7160");
+        assert_eq!(narrow.caption(MODULES, &spec(narrow)).cols, 4);
+
+        let wide = presets.get("relief-t7163").expect("t7163");
+        assert_eq!(wide.caption(MODULES, &spec(wide)).cols, 8);
+    }
+
+    #[test]
+    fn stock_that_prints_no_secret_gets_no_grid() {
+        let presets = presets();
+        let small = presets.get("relief-kopi-48").expect("kopi-48");
+        let caption = small.caption(MODULES, &spec(small));
+        assert_eq!(caption.secret_rows, 0);
+        assert_eq!(caption.blank_rows, 0);
     }
 
     #[test]
@@ -363,16 +526,18 @@ mod tests {
     }
 
     #[test]
-    fn caption_type_never_falls_below_the_legible_floor() {
+    fn no_shipped_preset_sets_type_below_the_legible_floor() {
         for (name, layout) in presets().iter() {
-            let pt = layout.caption_pt(MODULES, LONGEST);
+            let caption = layout.caption(MODULES, &spec(layout));
             assert!(
-                pt >= MIN_CAPTION_PT,
-                "{name} would set the caption at {pt}pt"
+                caption.url_pt >= MIN_URL_PT && caption.url_pt <= MAX_URL_PT,
+                "{name} would set the address at {}pt",
+                caption.url_pt
             );
             assert!(
-                pt <= MAX_CAPTION_PT,
-                "{name} would set the caption at {pt}pt"
+                caption.cell_pt >= MIN_CELL_PT,
+                "{name} would set the grid at {}pt",
+                caption.cell_pt
             );
         }
     }
@@ -382,7 +547,11 @@ mod tests {
         let presets = presets();
         let mut layout = presets.get("relief-kopi-48").expect("preset").clone();
         layout.qr_mm = 30.0;
-        assert!(layout.validate("overgrown", MODULES, LONGEST, 0).is_err());
+        assert!(
+            layout
+                .validate("overgrown", MODULES, &spec(&layout))
+                .is_err()
+        );
     }
 
     #[test]
@@ -408,7 +577,7 @@ mod tests {
             print_secret: false,
         };
         let err = layout
-            .validate("portrait", MODULES, LONGEST, 0)
+            .validate("portrait", MODULES, &spec(&layout))
             .expect_err("should be refused");
         assert!(
             err.to_string().contains("beside the symbol"),
@@ -423,7 +592,7 @@ mod tests {
         layout.label_lines = 12;
         assert!(
             layout
-                .validate("overfull", MODULES, LONGEST, SECRET_LINES)
+                .validate("overfull", MODULES, &spec(&layout))
                 .is_err()
         );
     }
@@ -435,7 +604,7 @@ mod tests {
         layout.cols = 9;
         assert!(
             layout
-                .validate("overwide", MODULES, LONGEST, SECRET_LINES)
+                .validate("overwide", MODULES, &spec(&layout))
                 .is_err()
         );
     }
@@ -448,7 +617,7 @@ mod tests {
         let mut layout = presets.get("relief-kopi-70").expect("preset").clone();
         layout.inset_x_mm = 0.5;
         let err = layout
-            .validate("flush", MODULES, LONGEST, SECRET_LINES)
+            .validate("flush", MODULES, &spec(&layout))
             .expect_err("should be refused");
         assert!(err.to_string().contains("toner"), "wrong error: {err}");
     }

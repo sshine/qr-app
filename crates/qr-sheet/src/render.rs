@@ -12,10 +12,13 @@ use qrcode::EcLevel;
 use serde::Serialize;
 use tokio::process::Command;
 
-use crate::{Error, Layout, Result, qr};
+use crate::{Error, Layout, Result, layout::CaptionSpec, qr};
 
 const SHEET_TYPST: &str = include_str!("../typst/sheet.typ");
 const CALIBRATION_TYPST: &str = include_str!("../typst/calibration.typ");
+
+/// How many lines the address is printed on.
+const URL_LINES: usize = 2;
 
 /// A4's height, past which a footer would overprint the last row.
 const PAGE_H_MM: f32 = crate::layout::PAGE_H_MM;
@@ -36,14 +39,18 @@ struct Document<'a> {
     layout: &'a Layout,
     preset: &'a str,
     qr_box_mm: f32,
-    /// Where to type what is printed beside it, set on its side in its own column so
-    /// the longest run of characters on the sticker costs width rather than type size.
-    host: String,
-    host_w_mm: f32,
-    host_pt: f32,
-    caption_pt: f32,
-    secret_pt: f32,
-    rule_gap_mm: f32,
+    /// The box beside the symbol, drawn the symbol's own height.
+    box_w_mm: f32,
+    box_h_mm: f32,
+    box_pad_mm: f32,
+    /// The row the address sits in, and the height the rows under it share.
+    header_h_mm: f32,
+    row_h_mm: f32,
+    cols: usize,
+    /// Rows left blank under the grid, to write on.
+    blank_rows: usize,
+    url_pt: f32,
+    cell_pt: f32,
     footer: String,
     footer_dy_mm: Option<f32>,
     codes: Vec<Entry>,
@@ -52,22 +59,34 @@ struct Document<'a> {
 #[derive(Serialize)]
 struct Entry {
     id: String,
-    label: String,
-    /// Broken across lines rather than set as one run: the whole secret on one line is
-    /// the widest thing a caption would hold, and it is what pushes narrow stock over.
-    secret_lines: Vec<String>,
+    /// The address broken after the path, so the longest run printed is the host and
+    /// the code gets a line to itself.
+    url_lines: Vec<String>,
+    /// The secret, one character to a cell, in reading order.
+    cells: Vec<String>,
     svg: String,
 }
 
-/// How many lines the printed secret is broken across.
-const SECRET_LINES: usize = 2;
+/// The address as it is printed: where to type, then what to type there.
+///
+/// The scheme is left off. Every browser and every phone keyboard puts it back, and the
+/// run it would add is longer than the host, so printing it would set the whole address
+/// smaller on exactly the stock that can least afford it.
+fn url_lines(base: &BaseUrl, id: &CodeId) -> Vec<String> {
+    vec![format!("{}/c/", typed_host(base)), id.to_string()]
+}
 
-/// Splits a grouped secret into `SECRET_LINES` lines of whole groups.
-fn secret_lines(secret: &Secret) -> Vec<String> {
-    let grouped = secret.grouped();
-    let groups: Vec<&str> = grouped.split(' ').collect();
-    let per = groups.len().div_ceil(SECRET_LINES).max(1);
-    groups.chunks(per).map(|chunk| chunk.join(" ")).collect()
+/// The secret split into the cells it is printed in, padded to fill its last row.
+///
+/// Ungrouped: a cell is the grouping. The spaces a printed secret carries exist to keep
+/// a reader's place in a run of sixteen characters, and a grid of boxes does that better
+/// than a space does.
+fn cells(secret: &Secret, cols: usize) -> Vec<String> {
+    let mut cells: Vec<String> = secret.expose().chars().map(|c| c.to_string()).collect();
+    while cells.len() % cols != 0 {
+        cells.push(String::new());
+    }
+    cells
 }
 
 pub struct SheetRenderer {
@@ -111,57 +130,72 @@ impl SheetRenderer {
             version = symbol.version;
 
             // The SVG is the only place the plaintext secret lands on disk, and it is
-            // already a bitmap by then: codes.json below carries the printed grouping,
-            // never the URL.
+            // already a bitmap by then: codes.json below carries the printed characters,
+            // never the URL that joins them.
             let svg_path = qr_dir.join(format!("{id}.svg"));
             write(&svg_path, symbol.svg.as_bytes())?;
 
             entries.push(Entry {
                 id: id.to_string(),
-                label: id.grouped(),
-                secret_lines: secret_lines(secret),
+                url_lines: url_lines(&request.base, id),
+                cells: Vec::new(),
                 svg: format!("qr/{id}.svg"),
             });
         }
 
-        let host = typed_host(&request.base);
-
-        // The longest line the caption has to hold, measured off what was actually
-        // generated rather than assumed from the default lengths, because the id length
-        // is configurable and the type size is fitted to it. The host is not among them
-        // any more: it is set on its side in a column of its own, so it costs width
-        // rather than holding the type size of every other label down to its length.
-        let printed_secret_lines = if request.layout.print_secret {
-            SECRET_LINES
+        // Measured off what was actually generated rather than assumed from the default
+        // lengths, because both the id length and the secret length are configurable and
+        // the box is fitted to them.
+        let longest_run = entries
+            .iter()
+            .flat_map(|e| e.url_lines.iter().map(|l| l.chars().count()))
+            .max()
+            .unwrap_or(1);
+        let secret_len = if request.layout.print_secret {
+            request
+                .codes
+                .first()
+                .map_or(0, |(_, secret)| secret.expose().chars().count())
         } else {
             0
         };
-        let longest = entries
-            .iter()
-            .flat_map(|e| {
-                std::iter::once(e.label.chars().count())
-                    .chain(e.secret_lines.iter().map(|l| l.chars().count()))
-            })
-            .max()
-            .unwrap_or(1);
+        let spec = CaptionSpec {
+            url_lines: URL_LINES,
+            longest_run,
+            secret_len,
+        };
 
-        // Only the secret stacks under the code now; the rule between them is counted
-        // with the writing lines the layout already allows for.
-        let caption_lines = printed_secret_lines;
-        request
-            .layout
-            .validate(&request.preset, modules, longest, caption_lines)?;
+        request.layout.validate(&request.preset, modules, &spec)?;
+        let caption = request.layout.caption(modules, &spec);
+
+        if secret_len > 0 {
+            for (entry, (_, secret)) in entries.iter_mut().zip(&request.codes) {
+                entry.cells = cells(secret, caption.cols);
+            }
+        }
+
+        // With nothing under it the address is given the whole box, rather than left
+        // floating above an empty half of one.
+        let rows = caption.secret_rows + caption.blank_rows;
+        let header_h_mm = if rows == 0 {
+            caption.box_h_mm
+        } else {
+            caption.header_h_mm
+        };
 
         let document = Document {
             layout: &request.layout,
             preset: &request.preset,
             qr_box_mm: request.layout.qr_box_mm(modules),
-            host: host.clone(),
-            host_w_mm: request.layout.host_w_mm(),
-            host_pt: request.layout.host_pt(),
-            caption_pt: request.layout.caption_pt(modules, longest),
-            secret_pt: request.layout.secret_pt(modules, longest),
-            rule_gap_mm: crate::layout::RULE_GAP_MM,
+            box_w_mm: caption.box_w_mm,
+            box_h_mm: caption.box_h_mm,
+            box_pad_mm: crate::layout::BOX_PAD_MM,
+            header_h_mm,
+            row_h_mm: caption.row_h_mm,
+            cols: caption.cols,
+            blank_rows: caption.blank_rows,
+            url_pt: caption.url_pt,
+            cell_pt: caption.cell_pt,
             footer: footer(request, version, modules),
             footer_dy_mm: footer_dy_mm(&request.layout),
             codes: entries,
@@ -182,12 +216,15 @@ impl SheetRenderer {
             layout,
             preset,
             qr_box_mm: 0.0,
-            host: String::new(),
-            host_w_mm: 0.0,
-            host_pt: 7.0,
-            caption_pt: 7.0,
-            secret_pt: 6.0,
-            rule_gap_mm: 0.0,
+            box_w_mm: 0.0,
+            box_h_mm: 0.0,
+            box_pad_mm: 0.0,
+            header_h_mm: 0.0,
+            row_h_mm: 0.0,
+            cols: 0,
+            blank_rows: 0,
+            url_pt: 7.0,
+            cell_pt: 7.0,
             footer: String::new(),
             footer_dy_mm: None,
             codes: Vec::new(),
@@ -330,8 +367,32 @@ mod tests {
     }
 
     #[test]
-    fn a_secret_is_broken_into_whole_groups_across_two_lines() {
+    fn a_secret_is_printed_one_character_to_a_cell() {
         let secret = Secret::parse("H7TQ4R9WX2ND5PKC").expect("secret");
-        assert_eq!(secret_lines(&secret), vec!["H7TQ 4R9W", "X2ND 5PKC"]);
+        let cells = cells(&secret, 4);
+        assert_eq!(cells.len(), 16);
+        assert_eq!(cells.first().map(String::as_str), Some("H"));
+        assert_eq!(cells.last().map(String::as_str), Some("C"));
+    }
+
+    /// The grid is drawn row by row, so a secret that does not divide by the row width
+    /// would otherwise leave typst a row short of cells.
+    #[test]
+    fn a_secret_that_does_not_fill_its_last_row_is_padded_out() {
+        let secret = Secret::parse("H7TQ4R9WX2ND5P").expect("secret");
+        let cells = cells(&secret, 4);
+        assert_eq!(cells.len(), 16);
+        assert_eq!(cells.last().map(String::as_str), Some(""));
+    }
+
+    /// The scheme is left off, and the break is after the path rather than inside the id.
+    #[test]
+    fn the_address_breaks_after_the_path() {
+        let base = BaseUrl::parse("https://qr.shine.town").expect("base");
+        let id = CodeId::parse("RDTAPG55XY").expect("id");
+        assert_eq!(
+            url_lines(&base, &id),
+            vec!["qr.shine.town/c/", "RDTAPG55XY"]
+        );
     }
 }

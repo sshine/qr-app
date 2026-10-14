@@ -26,7 +26,7 @@ pub enum Error {
 
     #[error(
         "preset {preset} leaves {caption_w_mm:.1}mm beside the symbol, which cannot hold \
-         the printed code at {needed_pt}pt; shrink qr_mm or pick wider stock"
+         the printed address at {needed_pt}pt; shrink qr_mm or pick wider stock"
     )]
     CaptionTooWide {
         preset: String,
@@ -35,7 +35,7 @@ pub enum Error {
     },
 
     #[error(
-        "preset {preset} asks for more caption than {caption_h_mm:.1}mm of label height \
+        "preset {preset} asks for more than the {caption_h_mm:.1}mm box beside the symbol \
          holds; reduce label_lines or turn print_secret off"
     )]
     CaptionTooTall { preset: String, caption_h_mm: f32 },

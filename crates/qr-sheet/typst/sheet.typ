@@ -14,38 +14,51 @@
 #set page(paper: "a4", margin: 0pt)
 #set text(font: "DejaVu Sans Mono", size: 7pt, fill: black)
 
-#let rule() = line(length: 100%, stroke: (paint: luma(60%), thickness: 0.3pt))
+#let hair = 0.3pt + luma(45%)
 
-// The address, turned on its side in the gutter beside the symbol.
+// Where to type, then what to type there, one run to a line.
 //
-// Rotated because it is the longest run of characters on the sticker and the one with
-// the least claim on width: upright it sets the caption's type size for every label,
-// and on its side it costs a column as narrow as the type is tall. reflow makes the
-// layout account for the turned box rather than the original one.
-#let host() = rotate(-90deg, reflow: true, text(
-  size: data.host_pt * 1pt,
-  fill: luma(45%),
-)[#data.host])
+// Set tight: the row it sits in is measured in millimetres on the Rust side, so the
+// leading has to be the one that measurement assumed.
+#let address(c) = {
+  set par(leading: 0.3em)
+  set text(size: data.url_pt * 1pt)
+  for (i, line) in c.url_lines.enumerate() {
+    if i > 0 { linebreak() }
+    line
+  }
+}
 
-// What is printed beside the symbol: the code, a line, and the secret under it.
+// Everything beside the symbol, in a box drawn the symbol's own height.
 //
-// The line is there to be read across, not written on: it separates the part that
-// identifies the sticker from the part that opens it.
-#let caption(c) = {
-  text(size: data.caption_pt * 1pt, weight: "bold")[#c.label]
-  if L.print_secret {
-    v(data.rule_gap_mm * 1mm)
-    rule()
-    v(data.rule_gap_mm * 1mm)
-    for (i, line) in c.secret_lines.enumerate() {
-      if i > 0 { linebreak() }
-      text(size: data.secret_pt * 1pt, fill: luma(35%))[#line]
-    }
+// A table rather than a stack of lines: the secret is typed a character at a time, and a
+// cell is somewhere for the eye to come back to after each look at the keyboard. Row
+// heights are explicit because a table has no height of its own to divide, and the whole
+// point of this box is that it ends where the symbol ends.
+#let meta(c) = {
+  let rows = (data.header_h_mm * 1mm,)
+  if data.row_h_mm > 0 {
+    let body = c.cells.len() / data.cols + data.blank_rows
+    rows += (data.row_h_mm * 1mm,) * int(body)
   }
-  for _ in range(L.label_lines) {
-    v(data.rule_gap_mm * 1mm)
-    rule()
-  }
+
+  table(
+    columns: (1fr,) * data.cols,
+    rows: rows,
+    stroke: hair,
+    inset: 0pt,
+    align: center + horizon,
+    table.cell(
+      colspan: data.cols,
+      inset: (x: data.box_pad_mm * 1mm, y: data.box_pad_mm * 1mm),
+      align: left + horizon,
+      address(c),
+    ),
+    ..c.cells.map(ch => text(size: data.cell_pt * 1pt)[#ch]),
+    // Blank, full width, and ruled off from each other: somewhere to write what this
+    // sticker went on.
+    ..range(data.blank_rows).map(_ => table.cell(colspan: data.cols)[]),
+  )
 }
 
 #let sticker(c) = box(
@@ -58,10 +71,11 @@
     none
   },
   grid(
-    columns: (data.qr_box_mm * 1mm, data.host_w_mm * 1mm, 1fr),
+    columns: (data.qr_box_mm * 1mm, data.box_w_mm * 1mm),
     column-gutter: 1.5mm,
-    align: (center + horizon, center + horizon, left + horizon),
-    image(c.svg, width: data.qr_box_mm * 1mm), host(), caption(c),
+    align: (center + horizon, center + horizon),
+    image(c.svg, width: data.qr_box_mm * 1mm),
+    box(width: data.box_w_mm * 1mm, meta(c)),
   ),
 )
 
