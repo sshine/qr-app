@@ -37,6 +37,16 @@ rustPlatform.buildRustPackage {
   SQLX_OFFLINE = "true";
   SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
 
+  # Ten statically linked test binaries, each carrying the whole dependency tree, is the
+  # largest thing this flake asks a runner to hold. Full debug info doubles it.
+  #
+  # Line tables rather than none: what a CI failure is worth is the file and line a
+  # backtrace names, and that survives. What goes is the type and variable detail nobody
+  # reads without a debugger attached, which there is no way to attach here.
+  CARGO_INCREMENTAL = "0";
+  CARGO_PROFILE_DEV_DEBUG = "line-tables-only";
+  CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG = "false";
+
   nativeBuildInputs = [
     postgresql
     typst

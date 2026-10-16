@@ -34,6 +34,17 @@ rustPlatform.buildRustPackage {
   SQLX_OFFLINE = "true";
   SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
 
+  # A lint pass has no use for any of this, and all of it is disk the runner has to find.
+  #
+  # The incremental cache is written to be read by the next build, and in a sandbox there
+  # is never a next build. Debug info is a third of what is left, in a derivation whose
+  # output is an empty file: nothing here is ever run, stepped through or backtraced. The
+  # build-override line is separate because build scripts are compiled under their own
+  # profile and keep their debug info when the main one drops it.
+  CARGO_INCREMENTAL = "0";
+  CARGO_PROFILE_DEV_DEBUG = "none";
+  CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG = "false";
+
   # Ahead of the stdenv's rustc, so clippy-driver and the compiler it drives are one
   # toolchain. A mismatch between them fails with a metadata version error that reads
   # like a broken build rather than a wrong PATH.
