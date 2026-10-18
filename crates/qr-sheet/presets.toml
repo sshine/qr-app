@@ -5,9 +5,9 @@
 # stock. `plain` is blank paper with cut guides and needs no stock at all.
 #
 # Every printer places the page origin a millimetre or two differently. `qr-server sheet
-# --calibration` prints crosshairs to measure that against; correct it by overriding
-# margin_left_mm and margin_top_mm rather than by editing a preset, so the stock's real
-# geometry stays recorded here.
+# --calibration` prints crosshairs to measure that against; correct it with --offset-x-mm
+# and --offset-y-mm rather than by editing a preset, so the stock's real geometry stays
+# recorded here and one printer's error does not travel with it.
 #
 # qr_mm is the symbol alone; the renderer adds the four-module quiet zone around it, so a
 # sticker must leave qr_mm * (modules + 8) / modules. The caption sits beside the symbol

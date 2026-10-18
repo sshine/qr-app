@@ -205,6 +205,18 @@ pub struct SheetArgs {
     #[arg(long, env = "QR_PRESETS_FILE")]
     pub presets_file: Option<PathBuf>,
 
+    /// Move every label right by this much. Negative moves left.
+    ///
+    /// For a printer that puts the page origin somewhere other than the paper's corner,
+    /// measured off --calibration. The preset keeps the stock's own geometry, so one
+    /// measurement here serves every preset that goes through the same printer.
+    #[arg(long, allow_negative_numbers = true, default_value_t = 0.0)]
+    pub offset_x_mm: f32,
+
+    /// Move every label down by this much. Negative moves up.
+    #[arg(long, allow_negative_numbers = true, default_value_t = 0.0)]
+    pub offset_y_mm: f32,
+
     /// What every code on this sheet becomes on first scan. Omitted leaves the chooser.
     #[arg(long)]
     pub handler: Option<String>,
@@ -335,6 +347,19 @@ mod tests {
         ])
         .expect("the chart's arguments should parse");
         assert!(!args.check_config);
+    }
+
+    /// A printer that starts high and left needs both of these negative, which argument
+    /// parsing reads as flags unless it is told otherwise.
+    #[test]
+    fn a_printer_offset_may_be_negative() {
+        let args = parse(&["sheet", "--offset-x-mm=-1.5", "--offset-y-mm", "-0.8"])
+            .expect("negative offsets should parse");
+        let Command::Sheet(sheet) = args.command else {
+            panic!("not the sheet command");
+        };
+        assert!((sheet.offset_x_mm + 1.5).abs() < f32::EPSILON);
+        assert!((sheet.offset_y_mm + 0.8).abs() < f32::EPSILON);
     }
 
     #[test]

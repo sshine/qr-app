@@ -137,7 +137,9 @@ pub async fn run(args: SheetArgs, check_only: bool) -> Result<(), StartupError> 
     let base = BaseUrl::parse(&args.base_url).map_err(StartupError::BaseUrl)?;
     let ec = qr_sheet::parse_ec_level(&args.codes.qr_ec_level)?;
     let presets = load_presets(args.presets_file.as_deref())?;
-    let layout = presets.get(&args.preset)?.clone();
+    let layout = presets
+        .get(&args.preset)?
+        .offset_by(args.offset_x_mm, args.offset_y_mm);
 
     if check_only {
         return Ok(());

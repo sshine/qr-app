@@ -3,7 +3,7 @@
 //! Die-cut stock has no cut guides to aim at, so a layout is an origin and a pitch in
 //! millimetres rather than a grid with gutters. Getting that wrong wastes a sheet of
 //! labels, which is why the presets carry the stock's real geometry and a printer's own
-//! offset is corrected by overriding the margins instead of editing one.
+//! offset is applied on top with [`Layout::offset_by`] instead of edited into one.
 
 use serde::{Deserialize, Serialize};
 
@@ -138,6 +138,19 @@ fn mono_width_mm(chars: usize, pt: f32) -> f32 {
 impl Layout {
     pub fn per_page(&self) -> usize {
         usize::from(self.cols) * usize::from(self.rows)
+    }
+
+    /// The same stock, moved by wherever this printer puts the page origin.
+    ///
+    /// A shift rather than a pair of replacement margins: the error belongs to the
+    /// printer and is the same whichever stock goes through it, so it is measured once
+    /// and applied to any preset.
+    pub fn offset_by(&self, dx_mm: f32, dy_mm: f32) -> Self {
+        Self {
+            margin_left_mm: self.margin_left_mm + dx_mm,
+            margin_top_mm: self.margin_top_mm + dy_mm,
+            ..self.clone()
+        }
     }
 
     /// The width the rendered SVG occupies, symbol plus quiet zone.
@@ -512,6 +525,31 @@ mod tests {
         let down = f32::from(layout.rows) * layout.label_h_mm;
         assert!((layout.margin_left_mm - (PAGE_W_MM - across) / 2.0).abs() < 0.01);
         assert!((layout.margin_top_mm - (PAGE_H_MM - down) / 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_printer_offset_moves_the_grid_and_leaves_the_stock_alone() {
+        let presets = presets();
+        let stock = presets.get("relief-kopi-63").expect("kopi-63");
+        let shifted = stock.offset_by(-1.5, 0.8);
+
+        assert!((shifted.margin_left_mm - (stock.margin_left_mm - 1.5)).abs() < 0.001);
+        assert!((shifted.margin_top_mm - (stock.margin_top_mm + 0.8)).abs() < 0.001);
+        assert!((shifted.pitch_x_mm - stock.pitch_x_mm).abs() < f32::EPSILON);
+        assert!((shifted.label_h_mm - stock.label_h_mm).abs() < f32::EPSILON);
+    }
+
+    /// The offset is applied before the layout is checked rather than after, so a
+    /// mistyped one is refused rather than printed with its last row off the paper.
+    #[test]
+    fn an_offset_that_pushes_the_grid_off_the_page_is_refused() {
+        let presets = presets();
+        let stock = presets.get("relief-kopi-63").expect("kopi-63");
+        let shifted = stock.offset_by(0.0, 20.0);
+        let err = shifted
+            .validate("relief-kopi-63", MODULES, &spec(&shifted))
+            .expect_err("should be refused");
+        assert!(err.to_string().contains("bottom"), "wrong error: {err}");
     }
 
     #[test]
