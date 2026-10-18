@@ -5,59 +5,21 @@
 #
 # Built through crate2nix rather than buildRustPackage: one derivation per crate instead
 # of one for the whole workspace, so an unchanged dependency is a store hit rather than a
-# recompile. Cargo.nix is generated and committed; `just crate2nix` regenerates it and
+# recompile, and the lint check gets the same store paths rather than a second compile.
+# Cargo.nix is generated and committed; `just crate2nix` regenerates it and
 # `just crate2nix-check` is what notices when it has fallen behind the manifests.
+#
+# The crate2nix instance itself lives in _cargo-nix.nix, shared with that check.
 {
   lib,
-  pkgs,
   stdenv,
+  callPackage,
   makeBinaryWrapper,
   typst,
-  cacert,
-  rust-bin,
   ...
 }:
 let
-  toolchain = rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
-
-  # The committed query cache, as a store path of its own.
-  #
-  # crate2nix gives every crate its own directory as `src`, so the workspace root — and
-  # with it `.sqlx` — is not in the sandbox the way buildRustPackage's whole-workspace
-  # source was. SQLX_OFFLINE_DIR is what points the macros back at it; without it every
-  # query! fails to expand and the error names a database rather than this.
-  sqlxCache = lib.fileset.toSource {
-    root = ../.;
-    fileset = ../.sqlx;
-  };
-
-  # Every crate whose query! macros expand from the committed cache.
-  sqlxEnv = _attrs: {
-    SQLX_OFFLINE = "true";
-    SQLX_OFFLINE_DIR = "${sqlxCache}/.sqlx";
-    # sqlx's default sslmode builds a TLS stack before it knows whether it will be used,
-    # and the managed Postgres does serve TLS. Without a trust store that construction
-    # fails rather than falling back.
-    SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
-  };
-
-  cargoNix = import ../Cargo.nix {
-    inherit pkgs;
-    # The toolchain from rust-toolchain.toml, not nixpkgs' rustc: the edition and the
-    # lints this workspace is written against are the ones the devshell uses.
-    buildRustCrateForPkgs =
-      p:
-      p.buildRustCrate.override {
-        rustc = toolchain;
-        cargo = toolchain;
-        defaultCrateOverrides = p.defaultCrateOverrides // {
-          qr-core = sqlxEnv;
-          qr-forward = sqlxEnv;
-          qr-photos = sqlxEnv;
-        };
-      };
-  };
-
+  cargoNix = callPackage ./_cargo-nix.nix { } { };
   unwrapped = cargoNix.workspaceMembers.qr-server.build;
 in
 stdenv.mkDerivation {

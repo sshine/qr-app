@@ -1,0 +1,91 @@
+# The crate2nix instance, in a plain flavour and a linting one.
+#
+# Shared between the build and the lint check so the two cannot diverge. The linting
+# flavour differs only in what it sets on the workspace's own crates, which is the whole
+# point: every third-party dependency keeps the store path the plain flavour gave it, so
+# linting costs the six crates here rather than the four hundred below them.
+#
+# `buildRustCrate` drives rustc directly rather than through cargo, so linting is a matter
+# of swapping the driver for clippy-driver rather than of running `cargo clippy`.
+{
+  lib,
+  pkgs,
+  cacert,
+  rust-bin,
+  ...
+}:
+let
+  toolchain = rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
+
+  # The committed query cache, as a store path of its own.
+  #
+  # crate2nix gives every crate its own directory as `src`, so the workspace root — and
+  # with it `.sqlx` — is not in the sandbox the way buildRustPackage's whole-workspace
+  # source was. SQLX_OFFLINE_DIR is what points the macros back at it; without it every
+  # query! fails to expand and the error names a database rather than this.
+  sqlxCache = lib.fileset.toSource {
+    root = ../.;
+    fileset = ../.sqlx;
+  };
+
+  # Every crate whose query! macros expand from the committed cache.
+  sqlxEnv = _attrs: {
+    SQLX_OFFLINE = "true";
+    SQLX_OFFLINE_DIR = "${sqlxCache}/.sqlx";
+    # sqlx's default sslmode builds a TLS stack before it knows whether it will be used,
+    # and the managed Postgres does serve TLS. Without a trust store that construction
+    # fails rather than falling back.
+    SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+  };
+
+  # Read off the directory rather than listed, so a crate added later is linted without
+  # anyone remembering to add it here. `members = ["crates/*"]` makes the directory the
+  # authority on this already.
+  members = builtins.attrNames (builtins.readDir ../crates);
+
+  # crate2nix does not emit rust-version, so CARGO_PKG_RUST_VERSION would come through
+  # empty and clippy would lose the floor it suppresses suggestions against. Without it a
+  # lint that cargo clippy holds back, because the API it suggests postdates the declared
+  # minimum, fires here instead and the two disagree about the same source.
+  msrv = (lib.importTOML ../Cargo.toml).workspace.package.rust-version;
+in
+{
+  lint ? false,
+}:
+import ../Cargo.nix {
+  inherit pkgs;
+  # The toolchain from rust-toolchain.toml, not nixpkgs' rustc: the edition and the
+  # lints this workspace is written against are the ones the devshell uses.
+  buildRustCrateForPkgs =
+    p:
+    let
+      base = p.buildRustCrate.override {
+        rustc = toolchain;
+        cargo = toolchain;
+        # Only consulted when useClippy is set, so naming it here costs the plain
+        # flavour nothing and keeps both flavours on one toolchain.
+        clippy = toolchain;
+        defaultCrateOverrides = p.defaultCrateOverrides // {
+          qr-core = sqlxEnv;
+          qr-forward = sqlxEnv;
+          qr-photos = sqlxEnv;
+        };
+      };
+    in
+    crate:
+    base (
+      crate
+      // lib.optionalAttrs (lint && builtins.elem crate.crateName members) {
+        useClippy = true;
+        # The default cap of "allow" silences every lint including clippy's, which would
+        # leave a check that passes because it looked at nothing.
+        capLints = "forbid";
+        rust-version = msrv;
+        # Uncapping only lets the warnings through; this is what makes them fail.
+        extraRustcOpts = (crate.extraRustcOpts or [ ]) ++ [
+          "-D"
+          "warnings"
+        ];
+      }
+    );
+}
