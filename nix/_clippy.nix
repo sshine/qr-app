@@ -20,8 +20,9 @@ let
   cargoNix = callPackage ./_cargo-nix.nix { } { lint = true; };
 
   linted = lib.mapAttrsToList (
-    _name: member:
+    name: member:
     member.build.override {
+      features = cargoNix.allFeatures name;
       runTests = true;
       testCrateFlags = [ "--list" ];
     }

@@ -52,6 +52,14 @@ in
 {
   lint ? false,
 }:
+# `allFeatures` is bolted on beside crate2nix.s own attributes rather than wrapped around
+# them, so callers reach `workspaceMembers` exactly as the generated file offers it.
+#
+# It is here because crate2nix resolves a workspace member.s features from its manifest
+# and nothing else, while the suite these checks replace ran under `--all-features`. The
+# difference is silent: qr-core.s tests/store.rs is `#![cfg(feature = "testing")]` all the
+# way down, and nothing else asks for that feature, so without this the file compiles to a
+# test binary that reports zero tests and passes.
 import ../Cargo.nix {
   inherit pkgs;
   # The toolchain from rust-toolchain.toml, not nixpkgs' rustc: the edition and the
@@ -88,4 +96,12 @@ import ../Cargo.nix {
         ];
       }
     );
+}
+// {
+  # Everything `--all-features` would turn on for one workspace crate: its defaults plus
+  # every feature its own manifest declares.
+  allFeatures =
+    crate:
+    [ "default" ]
+    ++ builtins.attrNames ((lib.importTOML (../crates + "/${crate}/Cargo.toml")).features or { });
 }
