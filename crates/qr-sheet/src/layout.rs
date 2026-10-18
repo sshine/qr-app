@@ -26,6 +26,12 @@ pub const PRINTABLE_MARGIN_MM: f32 = 4.0;
 /// The presets shipped with the binary.
 const BUILTIN: &str = include_str!("../presets.toml");
 
+/// The stock this prints on.
+///
+/// Named here rather than in the command line's default, so the one place that decides
+/// it is beside the check that it is a preset still offered.
+pub const DEFAULT_PRESET: &str = "relief-kopi-63";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layout {
     #[serde(default)]
@@ -48,6 +54,15 @@ pub struct Layout {
     pub label_lines: u8,
     pub cut_guides: bool,
     pub print_secret: bool,
+    /// Still renders, but no longer offered.
+    ///
+    /// Every figure in these presets but one came off a manufacturer's datasheet rather
+    /// than a caliper, and the one that was measured turned out not to match the
+    /// datasheet it was taken from. A sheet of labels is what the difference costs, so
+    /// the untested ones stay reachable by name for a link saved earlier and are kept
+    /// out of everything that suggests stock to print on.
+    #[serde(default)]
+    pub deprecated: bool,
 }
 
 /// DejaVu Sans Mono's advance width, in ems. The caption is set in it, so this is what
@@ -415,6 +430,14 @@ impl Presets {
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Layout)> {
         self.0.iter().map(|(k, v)| (k.as_str(), v))
     }
+
+    /// The stock this is willing to recommend.
+    ///
+    /// What a listing shows and what an error names. [`iter`](Self::iter) still reaches
+    /// the rest, because a deprecated preset renders exactly as it did before.
+    pub fn current(&self) -> impl Iterator<Item = (&str, &Layout)> {
+        self.iter().filter(|(_, layout)| !layout.deprecated)
+    }
 }
 
 #[cfg(test)]
@@ -552,6 +575,31 @@ mod tests {
         assert!(err.to_string().contains("bottom"), "wrong error: {err}");
     }
 
+    /// The default has to be stock someone would be told to buy, and nothing checks
+    /// that at startup: an unknown or deprecated name here is found at the printer.
+    #[test]
+    fn the_default_is_a_preset_that_is_still_offered() {
+        let presets = presets();
+        let layout = presets.get(DEFAULT_PRESET).expect("the default exists");
+        assert!(!layout.deprecated, "{DEFAULT_PRESET} is deprecated");
+    }
+
+    /// Deprecated means unlisted, not removed: a link minted against one of these is on
+    /// paper somewhere, and reprinting to match it has to stay possible.
+    #[test]
+    fn a_deprecated_preset_still_renders_and_is_simply_not_offered() {
+        let presets = presets();
+        let offered: Vec<_> = presets.current().map(|(name, _)| name).collect();
+        assert_eq!(offered, vec![DEFAULT_PRESET]);
+
+        let old = presets
+            .get("relief-t7160")
+            .expect("t7160 is still reachable");
+        assert!(old.deprecated);
+        old.validate("relief-t7160", MODULES, &spec(old))
+            .expect("a deprecated preset still has to fit its stock");
+    }
+
     #[test]
     fn every_shipped_preset_says_what_stock_it_is_for() {
         for (name, layout) in presets().iter() {
@@ -630,6 +678,7 @@ mod tests {
             label_lines: 0,
             cut_guides: false,
             print_secret: false,
+            deprecated: false,
         };
         let err = layout
             .validate("portrait", MODULES, &spec(&layout))

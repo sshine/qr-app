@@ -10,7 +10,7 @@ pub mod qr;
 pub mod render;
 
 pub use error::{Error, Result};
-pub use layout::{Layout, Presets};
+pub use layout::{DEFAULT_PRESET, Layout, Presets};
 pub use qr::{Budget, Symbol, budget, ec_level_name, ec_level_recovery, encode, parse_ec_level};
 pub use qrcode::EcLevel;
 pub use render::{SheetRenderer, SheetRequest};

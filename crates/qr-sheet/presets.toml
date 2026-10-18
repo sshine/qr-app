@@ -1,8 +1,10 @@
 # Sheet layouts, in millimetres on A4.
 #
-# The label stock is the Relief laser range Bog & Idé sells; the model codes match the
-# Avery sizes those sheets are cut to, so a preset here also fits the equivalent Avery
-# stock. `plain` is blank paper with cut guides and needs no stock at all.
+# Only relief-kopi-63 is offered. Everything else carries deprecated = true: those figures
+# came off a manufacturer's datasheet, and the one sheet of stock that has since been put
+# under a caliper did not match the datasheet it was named after. They still render by
+# name, so a link saved earlier keeps working, and whichever is measured next loses the
+# flag.
 #
 # Every printer places the page origin a millimetre or two differently. `qr-server sheet
 # --calibration` prints crosshairs to measure that against; correct it with --offset-x-mm
@@ -30,6 +32,7 @@ qr_mm = 30.0
 label_lines = 2
 cut_guides = true
 print_secret = true
+deprecated = true
 
 [relief-t7160]
 description = "Relief t7160 / Avery L7160, 63.5 x 38.1 mm, 21 up"
@@ -47,6 +50,7 @@ qr_mm = 27.0
 label_lines = 1
 cut_guides = false
 print_secret = true
+deprecated = true
 
 [relief-t7163]
 description = "Relief t7163 / Avery L7163, 99.1 x 38.1 mm, 14 up"
@@ -64,6 +68,7 @@ qr_mm = 27.0
 label_lines = 2
 cut_guides = false
 print_secret = true
+deprecated = true
 
 # The one to reach for when a box is photographed from across a room: 1.2 mm modules
 # against t7160's 0.8.
@@ -83,6 +88,7 @@ qr_mm = 40.0
 label_lines = 3
 cut_guides = false
 print_secret = true
+deprecated = true
 
 # A shelf or a room, not a box.
 [relief-t7167]
@@ -101,6 +107,7 @@ qr_mm = 100.0
 label_lines = 6
 cut_guides = false
 print_secret = true
+deprecated = true
 
 [relief-kopi-70]
 description = "Relief kopi, 70 x 36 mm, 24 up, no side margin"
@@ -118,6 +125,7 @@ qr_mm = 25.0
 label_lines = 1
 cut_guides = false
 print_secret = true
+deprecated = true
 
 [relief-kopi-105]
 description = "Relief kopi, 105 x 57 mm, 10 up, no side margin"
@@ -135,6 +143,7 @@ qr_mm = 40.0
 label_lines = 3
 cut_guides = false
 print_secret = true
+deprecated = true
 
 # Marginal, and kept so it can be measured rather than guessed at. A 33-module symbol at
 # 18 mm is 0.55 mm per module, which is where laser toner spread and a phone at arm's
@@ -159,6 +168,7 @@ qr_mm = 18.0
 label_lines = 0
 cut_guides = false
 print_secret = false
+deprecated = true
 
 # The same label as t7160, cut back to back in both directions rather than with a gutter
 # between the columns. The grid is 7.5mm narrower across because of it, so a t7160 sheet

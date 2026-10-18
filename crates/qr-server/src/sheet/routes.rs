@@ -126,11 +126,18 @@ async fn mint(
 ) -> Response {
     let sheets = &state.sheets;
 
+    // The offered ones, not every one: naming the deprecated stock here would read as a
+    // menu, and the whole point of the flag is that nobody should pick from it twice.
     let Ok(layout) = sheets.presets.get(&body.preset) else {
         return refused(format!(
-            "no preset named {}; this build has {}\n",
+            "no preset named {}; this build offers {}\n",
             body.preset,
-            sheets.presets.names().collect::<Vec<_>>().join(", "),
+            sheets
+                .presets
+                .current()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>()
+                .join(", "),
         ));
     };
 

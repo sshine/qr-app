@@ -198,7 +198,8 @@ pub struct SheetArgs {
     #[arg(long)]
     pub count: Option<usize>,
 
-    #[arg(long, default_value = "relief-t7160")]
+    /// Which label stock. The deprecated ones still render when named.
+    #[arg(long, default_value = qr_sheet::DEFAULT_PRESET)]
     pub preset: String,
 
     /// Replace the built-in layouts, for stock these do not cover.
