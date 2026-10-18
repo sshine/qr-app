@@ -159,3 +159,28 @@ qr_mm = 18.0
 label_lines = 0
 cut_guides = false
 print_secret = false
+
+# The same label as t7160, cut back to back in both directions rather than with a gutter
+# between the columns. The grid is 7.5mm narrower across because of it, so a t7160 sheet
+# printed on this stock misses by 12mm at the right-hand column.
+#
+# The package names the label size and nothing else, so the margins here are not a
+# datasheet figure: they are what A4 has left once three columns and seven rows have taken
+# their share, split evenly. A print that comes out off-centre is that assumption failing
+# rather than the printer.
+[relief-kopi-63]
+description = "Relief kopi, 63.5 x 38.1 mm back to back, 21 up"
+cols = 3
+rows = 7
+margin_left_mm = 9.75
+margin_top_mm = 15.15
+pitch_x_mm = 63.5
+pitch_y_mm = 38.1
+label_w_mm = 63.5
+label_h_mm = 38.1
+inset_x_mm = 2.0
+inset_y_mm = 2.0
+qr_mm = 27.0
+label_lines = 1
+cut_guides = false
+print_secret = true
