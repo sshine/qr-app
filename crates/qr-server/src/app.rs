@@ -37,6 +37,7 @@ pub fn router(state: AppState, sheets: sheet::routes::SheetState) -> Router {
     let pages = Router::new()
         .route("/", get(landing))
         .route("/go", get(go_form).post(go))
+        .route("/sheet", get(sheet_form))
         .route("/manifest.webmanifest", get(manifest))
         .route("/sw.js", get(assets::service_worker))
         .with_state(state.clone());
@@ -122,6 +123,7 @@ async fn landing() -> Response {
                     h1 { "Scan a code" }
                     p { "Point a camera at the sticker on the box." }
                     p { a href="/go" { "Or type what is printed under it" } }
+                    p { a href="/sheet" { "Print a new sheet of stickers" } }
                     template x-if="codes.length" {
                         section {
                             h2 { "Opened recently" }
@@ -160,6 +162,42 @@ async fn go_form() -> Response {
                             spellcheck="false" required;
                     }
                     button type="submit" { "Open" }
+                }
+            }
+        },
+    ))
+    .into_response()
+}
+
+/// The way in to the sheet route from the front page.
+///
+/// A form rather than a link straight at `/api/v1/sheets`, although that route is a GET
+/// and would work as one. Every load of it mints, so a link would be spent by the first
+/// crawler to follow it off the landing page, and by every browser that prefetches. A
+/// form is not submitted by either.
+///
+/// The stock is fixed and hidden: only one preset is offered, and a chooser here would
+/// put the deprecated ones back in front of someone.
+async fn sheet_form() -> Response {
+    shell::render(Page::new(
+        "Print a sheet",
+        html! {
+            main class="go" {
+                h1 { "Print a sheet" }
+                p { "Mints codes that did not exist before and opens the PDF. \
+                     The page it returns is the only copy of their secrets." }
+                form method="get" action="/api/v1/sheets" {
+                    input type="hidden" name="preset" value=(qr_sheet::DEFAULT_PRESET);
+                    label {
+                        "Stickers"
+                        input name="count" type="number" min="1" max="1000" value="21"
+                            required;
+                    }
+                    label {
+                        "Note"
+                        input name="note" autocomplete="off" spellcheck="false";
+                    }
+                    button type="submit" { "Print" }
                 }
             }
         },

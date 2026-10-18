@@ -71,6 +71,58 @@ async fn get(router: &Router, uri: &str) -> (StatusCode, String) {
     (status, location)
 }
 
+async fn body(router: &Router, uri: &str) -> String {
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(uri)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK, "{uri} did not answer");
+    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// The front page has to offer the generator, and offering it must not spend a sheet.
+///
+/// `/api/v1/sheets` mints on GET, so a link to it from the landing page is spent by the
+/// first crawler that follows it and by every browser that prefetches. The page in
+/// between carries a form instead, which neither of them submits.
+#[tokio::test]
+#[ignore = "needs a database"]
+async fn the_front_page_reaches_the_generator_without_minting() {
+    let db = TestDb::create().await.expect("test database");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let router = router(&db, &dir).await;
+
+    let landing = body(&router, "/").await;
+    assert!(
+        landing.contains(r#"href="/sheet""#),
+        "the front page does not reach the generator:\n{landing}"
+    );
+    assert!(
+        !landing.contains("/api/v1/sheets"),
+        "the front page links straight at the minting route:\n{landing}"
+    );
+
+    let form = body(&router, "/sheet").await;
+    assert!(
+        form.contains(r#"action="/api/v1/sheets""#),
+        "the generator page has no form to submit:\n{form}"
+    );
+    assert!(
+        form.contains(qr_sheet::DEFAULT_PRESET),
+        "the form names no stock, so the request would be refused:\n{form}"
+    );
+}
+
 /// The whole point: what a camera sends has to reach the code, not the 404 page.
 #[tokio::test]
 #[ignore = "needs a database"]
