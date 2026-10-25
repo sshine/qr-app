@@ -13,8 +13,13 @@ use crate::{Error, Result};
 pub const PAGE_W_MM: f32 = 210.0;
 pub const PAGE_H_MM: f32 = 297.0;
 
-/// A QR needs four empty modules on every side, or a scanner will not find its edges.
-pub const QUIET_MODULES: f32 = 4.0;
+/// The quiet zone the QR standard asks for: four empty modules on every side, or a scanner
+/// may not find the symbol's edges.
+pub const QUIET_MODULES: u8 = 4;
+
+fn standard_quiet_modules() -> u8 {
+    QUIET_MODULES
+}
 
 /// How close to the paper's edge a consumer laser printer will put toner.
 ///
@@ -51,6 +56,13 @@ pub struct Layout {
     pub inset_y_mm: f32,
     /// The symbol alone. The quiet zone is added around it.
     pub qr_mm: f32,
+    /// Empty modules on each side of the symbol.
+    ///
+    /// Below the standard's four only on stock whose rows sit back to back, where the
+    /// border the standard asks for is most of the white between two rows of codes; a
+    /// phone camera finds a symbol with two.
+    #[serde(default = "standard_quiet_modules")]
+    pub quiet_modules: u8,
     pub label_lines: u8,
     pub cut_guides: bool,
     pub print_secret: bool,
@@ -175,7 +187,7 @@ impl Layout {
             reason = "a QR is at most 177 modules across, which an f32 holds exactly"
         )]
         let modules = modules as f32;
-        self.qr_mm * (modules + 2.0 * QUIET_MODULES) / modules
+        self.qr_mm * (modules + 2.0 * f32::from(self.quiet_modules)) / modules
     }
 
     pub fn mm_per_module(&self, modules: usize) -> f32 {
@@ -658,6 +670,7 @@ mod tests {
             inset_x_mm: 2.0,
             inset_y_mm: 2.0,
             qr_mm: 25.0,
+            quiet_modules: QUIET_MODULES,
             label_lines: 0,
             cut_guides: false,
             print_secret: false,

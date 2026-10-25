@@ -52,7 +52,10 @@ pub struct Symbol {
     pub version: i16,
 }
 
-/// Encodes `data` and renders it as an SVG one unit per module.
+/// Encodes `data` and renders it as an SVG one unit per module, with no quiet zone.
+///
+/// The layout decides how wide the quiet zone is and leaves it as blank paper around the
+/// image, so it is not drawn here.
 ///
 /// The unit does not matter: typst scales the document to whatever width the layout asks
 /// for, and `shape-rendering="crispEdges"` keeps the module boundaries from being
@@ -71,6 +74,7 @@ pub fn encode(id: &str, data: &str, ec: EcLevel) -> Result<Symbol> {
 
     let svg = code
         .render::<svg::Color<'_>>()
+        .quiet_zone(false)
         .module_dimensions(1, 1)
         .dark_color(svg::Color("#000000"))
         .light_color(svg::Color("#ffffff"))

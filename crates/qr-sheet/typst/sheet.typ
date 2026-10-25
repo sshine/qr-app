@@ -70,13 +70,15 @@
   } else {
     none
   },
-  grid(
+  // Centred down the label by hand: the image is the bare symbol, so nothing above or
+  // below it pushes it off the label's top edge.
+  align(horizon, grid(
     columns: (data.qr_box_mm * 1mm, data.box_w_mm * 1mm),
     column-gutter: 1.5mm,
     align: (center + horizon, center + horizon),
-    image(c.svg, width: data.qr_box_mm * 1mm),
+    image(c.svg, width: L.qr_mm * 1mm),
     box(width: data.box_w_mm * 1mm, meta(c)),
-  ),
+  )),
 )
 
 #let per-page = L.cols * L.rows

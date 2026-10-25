@@ -11,8 +11,9 @@
 # and --offset-y-mm rather than by editing a preset, so the stock's real geometry stays
 # recorded here and one printer's error does not travel with it.
 #
-# qr_mm is the symbol alone; the renderer adds the four-module quiet zone around it, so a
-# sticker must leave qr_mm * (modules + 8) / modules. The caption sits beside the symbol
+# qr_mm is the symbol alone; the renderer leaves quiet_modules (four unless a preset says
+# otherwise) of blank paper on each side of it, so a sticker must leave
+# qr_mm * (modules + 2 * quiet_modules) / modules. The caption sits beside the symbol
 # in whatever width is left, and its type size is fitted to that column, so the figures
 # below were chosen against a 33-module symbol and are checked on every render.
 
@@ -177,6 +178,10 @@ deprecated = true
 # The die-cut sits about a millimetre off centre and a ruler reads to half of one, so the
 # side inset is wider than the vertical one: the outer columns keep clear of the label
 # edge even where the cut has wandered.
+#
+# The rows touch, so the white between two rows of codes is both stickers' insets and
+# quiet zones and nothing else. Two modules of quiet zone and a 1mm inset take that from
+# 11mm to 6mm and give the symbol the height back.
 [relief-kopi-63]
 description = "Relief kopi, 63.5 x 38.1 mm, 21 up"
 cols = 3
@@ -188,8 +193,9 @@ pitch_y_mm = 38.1
 label_w_mm = 63.5
 label_h_mm = 38.1
 inset_x_mm = 2.5
-inset_y_mm = 2.0
-qr_mm = 27.0
+inset_y_mm = 1.0
+qr_mm = 32.0
+quiet_modules = 2
 label_lines = 1
 cut_guides = false
 print_secret = true
