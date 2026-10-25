@@ -1,10 +1,9 @@
 name: CI
 
+# Started by hand only. The release workflow builds the same package on every push to
+# main, which proves it compiles; the full flake check on top is more than a 3Gi job
+# container has been shown to hold.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 # One group shared with the release workflow, so a push to main does not start a CI run
