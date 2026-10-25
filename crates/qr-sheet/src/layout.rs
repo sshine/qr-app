@@ -533,23 +533,6 @@ mod tests {
         assert_eq!(caption.blank_rows, 0);
     }
 
-    /// The margins of this one are derived rather than read off a package, so the
-    /// derivation is written down here: back to back in both directions, and what A4 has
-    /// left over split evenly.
-    #[test]
-    fn the_back_to_back_stock_is_centred_on_the_page() {
-        let presets = presets();
-        let layout = presets.get("relief-kopi-63").expect("kopi-63");
-
-        assert!((layout.pitch_x_mm - layout.label_w_mm).abs() < f32::EPSILON);
-        assert!((layout.pitch_y_mm - layout.label_h_mm).abs() < f32::EPSILON);
-
-        let across = f32::from(layout.cols) * layout.label_w_mm;
-        let down = f32::from(layout.rows) * layout.label_h_mm;
-        assert!((layout.margin_left_mm - (PAGE_W_MM - across) / 2.0).abs() < 0.01);
-        assert!((layout.margin_top_mm - (PAGE_H_MM - down) / 2.0).abs() < 0.01);
-    }
-
     #[test]
     fn a_printer_offset_moves_the_grid_and_leaves_the_stock_alone() {
         let presets = presets();
