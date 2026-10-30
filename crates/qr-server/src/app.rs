@@ -90,6 +90,10 @@ pub async fn state(
     blobs: Arc<dyn BlobStore>,
     registry: Registry,
 ) -> Result<AppState, crate::StartupError> {
+    // Before any page is rendered: the shell links to versioned asset URLs, which is
+    // what stops a warm service worker from serving the previous deploy's CSS.
+    qr_handler::shell::set_asset_version(assets::version());
+
     let base = BaseUrl::parse(&args.base_url).map_err(crate::StartupError::BaseUrl)?;
 
     Ok(AppState::new(
@@ -285,7 +289,7 @@ async fn manifest() -> Response {
             "background_color": "#fbfaf8",
             "theme_color": "#16150f",
             "icons": [{
-                "src": "/assets/icon.svg",
+                "src": assets::url("icon.svg"),
                 "sizes": "any",
                 "type": "image/svg+xml",
                 "purpose": "any maskable",

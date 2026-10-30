@@ -31,6 +31,27 @@ pub fn router() -> Router {
     Router::new().route("/assets/{*path}", get(serve))
 }
 
+/// A short version of the whole asset set.
+///
+/// Every page links to `/assets/<name>?v=<version>`, so a deploy that changes any asset
+/// changes the URL. That is what makes the service worker's cache-first rule safe: it
+/// cannot have the new bytes under a URL it has never seen. The version is the first
+/// four hex digits of each asset's SHA-256, in a fixed order.
+pub fn version() -> String {
+    let mut out = String::new();
+    for name in ["app.css", "app.js", "vendor/alpine.js", "icon.svg"] {
+        if let Some(file) = Assets::get(name) {
+            out.push_str(&hex16(&file.metadata.sha256_hash())[..4]);
+        }
+    }
+    out
+}
+
+/// The URL the shell and the manifest should publish for an asset.
+pub fn url(name: &str) -> String {
+    format!("/assets/{name}?v={}", version())
+}
+
 async fn serve(Path(path): Path<String>) -> Response {
     // `vendor/alpine.js` is published at `/assets/alpine.js`: where it came from is a
     // fact about this repository and not something a page should have to spell.
@@ -61,10 +82,14 @@ fn file_response(name: &str, file: &rust_embed::EmbeddedFile) -> Response {
 
     // The service worker is the one file that must not be cached: a stale one keeps
     // serving a stale shell, and the browser would have no way to be told otherwise.
+    //
+    // Everything else is served from a URL that carries its content version, so the
+    // bytes under a given URL really cannot change. That is what the old `must-revalidate`
+    // hour could not promise, and what the service worker's cache-first rule needs.
     let cache = if name == SERVICE_WORKER {
         "no-cache"
     } else {
-        "public, max-age=3600, must-revalidate"
+        "public, max-age=31536000, immutable"
     };
 
     (
@@ -101,5 +126,20 @@ mod tests {
             Assets::get("vendor/alpine.js").is_some(),
             "the vendored Alpine build is not embedded"
         );
+    }
+
+    #[test]
+    fn the_version_is_short_enough_to_put_in_every_url() {
+        let version = version();
+        assert_eq!(version.len(), 16, "{version}");
+        assert!(
+            version.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{version} is not hex"
+        );
+    }
+
+    #[test]
+    fn an_asset_url_carries_the_version() {
+        assert_eq!(url("app.css"), format!("/assets/app.css?v={}", version()));
     }
 }

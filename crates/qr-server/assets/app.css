@@ -73,20 +73,38 @@ button,
   cursor: pointer;
 }
 
-/* Thumb-sized, because this is tapped while holding a box open with the other hand. */
+/* Thumb-sized, because this is tapped while holding a box open with the other hand.
+ *
+ * Both controls in this row are labels over hidden inputs, so the label has to be the
+ * flex item for the two boxes to line up. The primary and secondary styles differ in
+ * colour only; height and horizontal padding are shared, or the row looks accidental. */
 .capture {
   display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: var(--gap);
   margin-bottom: 1.25rem;
 }
 
+.capture label {
+  display: flex;
+  margin: 0;
+}
+
+.capture-button span,
+.pick-button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.2rem;
+  padding: 0 1.25rem;
+}
+
 .capture-button span {
-  display: block;
   background: var(--accent);
   border-color: var(--accent);
   color: var(--bg);
   font-weight: 600;
-  padding: 0.85rem 1.25rem;
 }
 
 /* The album is the page, not a gallery inside one: a photo gets the whole width of the
@@ -124,10 +142,12 @@ main.album {
   filter: grayscale(0.6);
 }
 
-.tile-delete button {
+.tile-delete button,
+.tile > button.tile-delete {
   position: absolute;
   top: 0.25rem;
   right: 0.25rem;
+  z-index: 1;
   width: 2rem;
   height: 2rem;
   padding: 0;
@@ -283,11 +303,12 @@ input[type="text"],
  * long album, and translucent so it does not read as a second header. */
 .code-controls {
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0);
   z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap);
+  gap: 0.4rem var(--gap);
   padding: 0.5rem 1rem;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   border-bottom: 1px solid var(--line);
@@ -311,9 +332,14 @@ input[type="text"],
 }
 
 .code-controls .tagged {
+  min-width: 0;
+  max-width: 100%;
   margin-left: -0.25rem;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Where a sticker is. */

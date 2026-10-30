@@ -4,28 +4,20 @@
 //
 // What it caches and what it refuses to cache is the whole design. Pages and API
 // responses are capability-protected and must never sit in a cache that outlives the
-// cookie, so they are network-only. Assets and photo derivatives are addressed by
-// content or by version, so their bytes cannot change under the URL and caching them
-// is simply correct.
+// cookie, so they are network-only. Assets are requested with a `?v=` that changes with
+// their content, and photo derivatives are content-addressed, so a cached URL can never
+// yield different bytes. That is what makes cache-first correct here.
+//
+// Bump VERSION whenever this file's caching rules change. It is what evicts a shell
+// cached by a previous version, including one that stored assets the new pages no
+// longer ask for.
 
-const VERSION = "qr-v1";
+const VERSION = "qr-v2";
 const SHELL = `${VERSION}-shell`;
 const MEDIA = `${VERSION}-media`;
 
-const PRECACHE = [
-  "/assets/app.css",
-  "/assets/app.js",
-  "/assets/alpine.js",
-  "/assets/icon.svg",
-];
-
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(SHELL)
-      .then((cache) => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting()),
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {

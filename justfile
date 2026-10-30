@@ -273,7 +273,7 @@ serve-e2e:
     trap 'rm -rf "$QR_DATA_DIR"; dropdb -h 127.0.0.1 -p {{ pgport }} -U postgres --if-exists --force "$db" || true' EXIT
     cargo run -q -p qr-server -- migrate
     mkdir -p e2e/fixtures
-    cargo run -q -p qr-server --example mint -- 16 > e2e/fixtures/codes.json
+    cargo run -q -p qr-server --example mint -- 18 > e2e/fixtures/codes.json
     exec cargo run -q -p qr-server -- serve \
       --bind 127.0.0.1:8081 --health-bind 127.0.0.1:9091 \
       --base-url http://127.0.0.1:8081 --insecure-cookies

@@ -36,11 +36,11 @@ test.describe("releasing and recovering a code", () => {
     const photo = await page.locator("ul.grid li.tile img").first().getAttribute("src");
     expect(photo).not.toBeNull();
 
-    await page.getByRole("button", { name: "Release…" }).click();
+    await page.getByRole("button", { name: "Release", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Release this code?" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText(/photos, link or destination stay/i);
-    await dialog.getByRole("button", { name: "Release QR code" }).click();
+    await dialog.getByRole("button", { name: "Release this code" }).click();
 
     // The chooser is what an unused code offers; a used one also offers its history.
     await expect(page.getByRole("heading", { name: "Recover QR code" })).toBeVisible();
@@ -69,9 +69,9 @@ test.describe("releasing and recovering a code", () => {
       .click();
     await expect(page.locator("main.album")).toBeVisible();
 
-    await page.getByRole("button", { name: "Release…" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Keep it" }).click();
-    await expect(page.getByRole("dialog")).toBeHidden();
+    await page.getByRole("button", { name: "Release", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await page.reload();
     await expect(page.locator("main.album")).toBeVisible();

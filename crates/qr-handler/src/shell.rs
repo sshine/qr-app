@@ -6,7 +6,30 @@
 //! render the HTML, so sending it twice — once as markup, once as JSON — costs a few
 //! hundred bytes and saves a request and a spinner.
 
+use std::sync::OnceLock;
+
 use maud::{DOCTYPE, Markup, PreEscaped, html};
+
+/// The content version every asset URL carries.
+///
+/// Set once by the binary, which is the only crate that can see the embedded files. The
+/// version is what makes the service worker's cache-first rule safe: a deploy that
+/// changes an asset changes its URL, so a cached URL cannot yield stale bytes.
+static ASSET_VERSION: OnceLock<String> = OnceLock::new();
+
+/// Publishes the build's asset version. Later calls are ignored; a page rendered before
+/// this has been called (only possible in a test) links to the unversioned URL.
+pub fn set_asset_version(version: impl Into<String>) {
+    let _ = ASSET_VERSION.set(version.into());
+}
+
+/// The URL to publish for an asset.
+fn asset(name: &str) -> String {
+    match ASSET_VERSION.get() {
+        Some(version) => format!("/assets/{name}?v={version}"),
+        None => format!("/assets/{name}"),
+    }
+}
 
 pub struct Page {
     pub title: String,
@@ -69,8 +92,8 @@ pub fn render(page: Page) -> Markup {
                 meta name="theme-color" content="#111111";
                 title { (page.title) }
                 link rel="manifest" href="/manifest.webmanifest";
-                link rel="icon" href="/assets/icon.svg" type="image/svg+xml";
-                link rel="stylesheet" href="/assets/app.css";
+                link rel="icon" href=(asset("icon.svg")) type="image/svg+xml";
+                link rel="stylesheet" href=(asset("app.css"));
                 (page.head)
             }
             body {
@@ -80,8 +103,8 @@ pub fn render(page: Page) -> Markup {
                 // alpine:init listener, and deferred scripts run in document order, so
                 // Alpine starting first would fire that event before anything is
                 // listening and leave every x-data naming an undefined component.
-                script src="/assets/app.js" defer {}
-                script src="/assets/alpine.js" defer {}
+                script src=(asset("app.js")) defer {}
+                script src=(asset("alpine.js")) defer {}
             }
         }
     }
@@ -116,14 +139,16 @@ mod tests {
 
     #[test]
     fn the_shell_supplies_what_a_handler_would_forget() {
+        set_asset_version("a1b2c3d4e5f60718");
         let markup = render(Page::new("a box", html! { p { "hello" } }));
         let page = markup.into_string();
         for expected in [
             "<!DOCTYPE html>",
             "viewport",
             "manifest.webmanifest",
-            "/assets/app.css",
-            "/assets/alpine.js",
+            "/assets/app.css?v=a1b2c3d4e5f60718",
+            "/assets/app.js?v=a1b2c3d4e5f60718",
+            "/assets/alpine.js?v=a1b2c3d4e5f60718",
             STATE_ID,
         ] {
             assert!(page.contains(expected), "the shell is missing {expected}");

@@ -131,40 +131,51 @@ fn looped(from: &CodeId) -> Response {
 /// way to lose a box.
 fn controls(code: &CodeId, managing: bool, location: Option<&Location>) -> maud::Markup {
     html! {
-        nav class="code-controls" x-data="codeControls" aria-label="This code" {
-            @if managing {
-                a class="control" href={ "/c/" (code) } { "Open" }
-            } @else {
-                a class="control" href={ "/c/" (code) "/manage" } { "Manage" }
-            }
-            a class="control" href={ "/c/" (code) "/location" } { "Location" }
-            @if let Some(location) = location {
-                span class="tagged" { (location.name) }
-            }
-            button type="button" class="control" x-on:click="openRelease" { "Release…" }
+        // The dialog is a sibling of the bar rather than a child. The bar has a
+        // backdrop-filter, which makes it the containing block for fixed descendants; a
+        // modal inside it would be fixed to the bar, not the viewport. The wrapper is
+        // what shares the Alpine component between the two.
+        div x-data="codeControls" {
+            nav class="code-controls" aria-label="This code" {
+                @if managing {
+                    a class="control" href={ "/c/" (code) } { "Open" }
+                } @else {
+                    a class="control" href={ "/c/" (code) "/manage" } { "Manage" }
+                }
+                a class="control" href={ "/c/" (code) "/location" } { "Location" }
+                @if let Some(location) = location {
+                    span class="tagged" { (location.name) }
+                }
+                button type="button" class="control" x-on:click="openRelease" { "Release" }
 
-            div class="modal-backdrop" x-show="releaseOpen" x-cloak {
-                div class="modal" role="dialog" aria-modal="true"
-                    aria-labelledby="release-title" {
-                    h2 id="release-title" { "Release this code?" }
-                    p {
-                        "The photos, link or destination stay in the database. Scanning this
-                         sticker again offers them back under Recover QR code."
-                    }
-                    div class="modal-actions" {
-                        button type="button" x-on:click="closeRelease" { "Keep it" }
-                        form method="post" action={ "/c/" (code) "/api/v1/release" } {
-                            button type="submit" class="danger" { "Release QR code" }
-                        }
+                noscript {
+                    form class="noscript-release" method="post"
+                        action={ "/c/" (code) "/api/v1/release" } {
+                        span { "Release this code? Its photos and history are kept." }
+                        button type="submit" { "Release this code" }
                     }
                 }
             }
 
-            noscript {
-                form class="noscript-release" method="post"
-                    action={ "/c/" (code) "/api/v1/release" } {
-                    span { "Release this code? Its photos and history are kept." }
-                    button type="submit" { "Release QR code" }
+            // A template rather than a hidden div: if the script never runs, the dialog
+            // is not in the document at all. A modal that leaks into the page when Alpine
+            // fails is worse than no button.
+            template "x-if"="releaseOpen" {
+                div class="modal-backdrop" {
+                    div class="modal" role="dialog" aria-modal="true"
+                        aria-labelledby="release-title" {
+                        h2 id="release-title" { "Release this code?" }
+                        p {
+                            "The photos, link or destination stay in the database. Scanning
+                             this sticker again offers them back under Recover QR code."
+                        }
+                        div class="modal-actions" {
+                            button type="button" x-on:click="closeRelease" { "Cancel" }
+                            form method="post" action={ "/c/" (code) "/api/v1/release" } {
+                                button type="submit" class="danger" { "Release this code" }
+                            }
+                        }
+                    }
                 }
             }
         }
