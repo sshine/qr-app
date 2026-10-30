@@ -85,6 +85,8 @@ import ../Cargo.nix {
           qr-core = sqlxEnv;
           qr-forward = sqlxEnv;
           qr-photos = sqlxEnv;
+          # The overview reads the schema directly, so it expands query! macros too.
+          qr-server = sqlxEnv;
         };
       };
     in

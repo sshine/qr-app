@@ -7333,6 +7333,12 @@ rec {
             features = [ "ansi" "env-filter" "fmt" "std" ];
           }
           {
+            name = "url";
+            packageId = "url";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
             name = "uuid";
             packageId = "uuid";
             usesDefaultFeatures = false;
