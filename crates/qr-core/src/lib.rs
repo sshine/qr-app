@@ -18,6 +18,6 @@ pub mod url;
 pub use blob::{BlobKey, BlobRead, BlobStore, FsBlobStore};
 pub use error::{Error, Result};
 pub use ids::{CodeId, Secret, SecretHash, decoy_hash};
-pub use model::{Binding, BlobRecord, Code, EventKind, MintedCode, Sheet};
+pub use model::{Binding, BlobRecord, Code, CodeLink, EventKind, MintedCode, Sheet};
 pub use store::Store;
 pub use url::BaseUrl;

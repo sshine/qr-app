@@ -50,6 +50,7 @@ impl Handler for PhotoAlbum {
             title: "Photos",
             blurb: "Photograph what is in the box, and look at it again later.",
             icon: maud::PreEscaped(ICON),
+            fields: html! {},
         }
     }
 

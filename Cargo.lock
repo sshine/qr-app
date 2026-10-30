@@ -2171,6 +2171,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "qr-link"
+version = "0.1.1"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "maud",
+ "qr-core",
+ "qr-handler",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "qr-photos"
 version = "0.1.1"
 dependencies = [
@@ -2210,6 +2228,7 @@ dependencies = [
  "qr-core",
  "qr-forward",
  "qr-handler",
+ "qr-link",
  "qr-photos",
  "qr-sheet",
  "reqwest",

@@ -14,6 +14,20 @@ pub struct ChooserCard {
     pub blurb: &'static str,
     /// An inline `<svg>`, so the chooser needs no second request and no icon font.
     pub icon: maud::PreEscaped<&'static str>,
+    /// Extra controls inside the chooser's form, for a handler that needs a value
+    /// before it can be claimed. Names beginning `config.` become that handler's config,
+    /// which is how a form post works without any JavaScript.
+    pub fields: Markup,
+}
+
+/// A target this handler hands the visitor over to.
+///
+/// The link handler returns one, and the landing route turns it into a redirect that also
+/// sets the target code's capability cookie. Carrying the secret here rather than in the
+/// handler's `render` keeps cookie writing in one place.
+pub struct Delegate {
+    pub code: qr_core::CodeId,
+    pub secret: qr_core::Secret,
 }
 
 /// What `render` gives back.
@@ -95,10 +109,17 @@ pub trait Handler: Send + Sync + 'static {
     }
 
     /// Checks and normalises a config before it is stored.
+    ///
+    /// Given the handler context because a handler may have to look something up
+    /// before it can accept a config — the link handler proves the target's secret this
+    /// way. Runs before the binding exists, so this is for checks that need no row of
+    /// their own.
     async fn validate_config(
         &self,
+        ctx: &HandlerCtx,
         config: serde_json::Value,
     ) -> Result<serde_json::Value, HandlerError> {
+        let _ = ctx;
         Ok(config)
     }
 
@@ -138,6 +159,41 @@ pub trait Handler: Send + Sync + 'static {
         ctx: &HandlerCtx,
         binding: &Binding,
     ) -> Result<HandlerPage, HandlerError>;
+
+    /// The body of `GET /c/{code}/manage`.
+    ///
+    /// The page a handler shows when the code is being administered rather than used.
+    /// Defaults to the ordinary page, which is right for an album; a handler that sends
+    /// the visitor elsewhere overrides it so the code can still be released.
+    async fn manage(
+        &self,
+        ctx: &HandlerCtx,
+        binding: &Binding,
+    ) -> Result<HandlerPage, HandlerError> {
+        self.render(ctx, binding).await
+    }
+
+    /// Where a scan of this binding should really go, if anywhere.
+    ///
+    /// The landing route follows it, setting the target's capability cookie as it
+    /// redirects, so a sticker on the other side of a box opens exactly what the first
+    /// one does.
+    async fn delegate(
+        &self,
+        ctx: &HandlerCtx,
+        binding: &Binding,
+    ) -> Result<Option<Delegate>, HandlerError> {
+        let _ = (ctx, binding);
+        Ok(None)
+    }
+
+    /// Pages this handler owns, mounted under `/c/{code}/h/{id}`.
+    ///
+    /// Not the API: what lives here is HTML a visitor can navigate to, such as a
+    /// full-width view of one photo. The capability layer has already run.
+    fn pages(&self) -> axum::Router<AppState> {
+        axum::Router::new()
+    }
 
     /// Routes mounted under `/c/{code}/api/v1/h/<id>`.
     ///

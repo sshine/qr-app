@@ -46,6 +46,7 @@ impl Handler for ForwardHandler {
             title: "Link",
             blurb: "Send whoever scans this somewhere, and change where later.",
             icon: maud::PreEscaped(ICON),
+            fields: html! {},
         }
     }
 
@@ -64,6 +65,7 @@ impl Handler for ForwardHandler {
     /// in its config is live the moment it is first scanned.
     async fn validate_config(
         &self,
+        _ctx: &HandlerCtx,
         config: serde_json::Value,
     ) -> Result<serde_json::Value, HandlerError> {
         if config.get("url").is_none() {

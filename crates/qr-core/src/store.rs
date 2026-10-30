@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     CodeId, Error, Result, Secret, SecretHash, decoy_hash,
-    model::{Binding, BlobRecord, Code, EventKind, MintedCode, Sheet},
+    model::{Binding, BlobRecord, Code, CodeLink, EventKind, MintedCode, Sheet},
 };
 
 /// How many times minting retries a colliding id before giving up.
@@ -382,6 +382,49 @@ pub async fn set_binding_title<'e, E: PgExecutor<'e>>(
     .execute(ex)
     .await?;
     Ok(())
+}
+
+/// Writes the delegation a link binding carries.
+///
+/// Inserted inside the transaction that creates the binding, so there is never a claimed
+/// link with nothing to follow. The target secret is the capability the link was made
+/// with; it is stored rather than hashed because the redirect has to present it again.
+pub async fn insert_link<'e, E: PgExecutor<'e>>(
+    ex: E,
+    binding_id: Uuid,
+    target: &CodeId,
+    secret: &Secret,
+) -> Result<()> {
+    sqlx::query!(
+        r#"
+        INSERT INTO code_links (binding_id, target_code_id, target_secret)
+        VALUES ($1, $2, $3)
+        "#,
+        binding_id,
+        target.as_str(),
+        secret.expose(),
+    )
+    .execute(ex)
+    .await?;
+    Ok(())
+}
+
+/// The code and secret a link stands in for.
+pub async fn link<'e, E: PgExecutor<'e>>(ex: E, binding_id: Uuid) -> Result<Option<CodeLink>> {
+    let row = sqlx::query!(
+        "SELECT target_code_id, target_secret FROM code_links WHERE binding_id = $1",
+        binding_id,
+    )
+    .fetch_optional(ex)
+    .await?;
+
+    row.map(|row| {
+        Ok(CodeLink {
+            target: CodeId::parse(&row.target_code_id)?,
+            secret: Secret::parse(&row.target_secret)?,
+        })
+    })
+    .transpose()
 }
 
 /// Records a blob's metadata. Idempotent, because the key is the content.

@@ -13,7 +13,7 @@ pub mod shell;
 pub mod state;
 
 pub use capability::{CodeAccess, CodeCtx};
-pub use handler::{ChooserCard, Handler, HandlerError, HandlerPage};
+pub use handler::{ChooserCard, Delegate, Handler, HandlerError, HandlerPage};
 pub use id::HandlerId;
 pub use registry::{Registry, RegistryBuilder};
 pub use shell::{Page, render as render_page};
@@ -50,6 +50,11 @@ pub fn mount(state: AppState) -> Router {
         // is a 404 in the router instead of a lookup that has to decide what to say.
         let prefix = format!("/c/{{code}}/api/v1/h/{}", handler.id());
         guarded = guarded.nest(&prefix, handler.routes());
+
+        // And the handler's pages, a sibling of the API so a browser can navigate to one
+        // without it looking like JSON.
+        let pages = format!("/c/{{code}}/h/{}", handler.id());
+        guarded = guarded.nest(&pages, handler.pages());
     }
 
     // route_layer, not layer: a path matching nothing in this subtree should 404 in the

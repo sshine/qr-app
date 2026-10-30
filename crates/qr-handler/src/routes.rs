@@ -1,8 +1,10 @@
 //! The routes every code has, whatever it became.
 
+use std::collections::HashMap;
+
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -14,9 +16,16 @@ use serde_json::json;
 use crate::{
     HandlerPage,
     capability::{self, CodeCtx},
+    handler::Delegate,
     shell::{self, Page},
     state::AppState,
 };
+
+/// How many links may follow one another before the chain is called a loop.
+///
+/// A handful is more than a box with stickers on two sides needs; a chain this long is
+/// either a cycle built by releasing and reclaiming, or someone having a laugh.
+const MAX_LINK_HOPS: u32 = 8;
 
 /// Everything a handler failure turns into.
 fn handler_response(error: &crate::HandlerError) -> Response {
@@ -44,6 +53,70 @@ fn store_response(error: &qr_core::Error) -> Response {
     (StatusCode::SERVICE_UNAVAILABLE, "try again\n").into_response()
 }
 
+/// How a link counts the hops it has already taken.
+///
+/// Only present while a chain of links is being followed; the page that finally
+/// renders sends the visitor back to the untagged URL.
+#[derive(Debug, Default, Deserialize)]
+pub struct Hop {
+    #[serde(default)]
+    pub hop: Option<u32>,
+}
+
+/// Sends a scan of one sticker to another, with the other code's capability.
+///
+/// The cookie is what makes the destination work without asking again: the visitor
+/// proved the link in the fragment, and only this service knows the target's secret. It
+/// is scoped to the target's path like any other, so both codes keep their own cookie.
+fn hand_off(state: &AppState, from: &CodeId, next: Delegate, hops: u32) -> Response {
+    if hops >= MAX_LINK_HOPS {
+        return looped(from);
+    }
+
+    let cookies = state.cookies();
+    let location = format!("/c/{}?hop={}", next.code, hops + 1);
+
+    (
+        StatusCode::SEE_OTHER,
+        [
+            (header::LOCATION, location),
+            (
+                header::SET_COOKIE,
+                capability::set_cookie(
+                    &next.code,
+                    &next.secret,
+                    cookies.max_age_days,
+                    cookies.secure,
+                ),
+            ),
+            (header::CACHE_CONTROL, "no-store".to_owned()),
+        ],
+    )
+        .into_response()
+}
+
+fn looped(from: &CodeId) -> Response {
+    (
+        StatusCode::LOOP_DETECTED,
+        shell::render(Page::new(
+            "Links in a loop",
+            html! {
+                main class="go" {
+                    h1 { "These codes keep pointing at each other" }
+                    p {
+                        "Code "
+                        span class="code-id" { (from.grouped()) }
+                        " is part of a chain of links that never reaches a page."
+                    }
+                    p { "Release one of the links, then scan it again." }
+                    p { a href="/" { "Back" } }
+                }
+            },
+        )),
+    )
+        .into_response()
+}
+
 /// `GET /c/{code}` — the page a scan lands on.
 ///
 /// Unguarded on purpose: this is the one route that has to answer before a cookie
@@ -51,6 +124,7 @@ fn store_response(error: &qr_core::Error) -> Response {
 pub async fn landing(
     State(state): State<AppState>,
     Path(raw): Path<String>,
+    Query(hop): Query<Hop>,
     headers: HeaderMap,
 ) -> Response {
     let Ok(code_id) = CodeId::parse(&raw) else {
@@ -67,6 +141,11 @@ pub async fn landing(
     };
 
     let Some(binding) = binding else {
+        if hop.hop.is_some() {
+            // A link sent the visitor here; this code is not itself a link, so the
+            // hop counter has done its job and does not belong in the address bar.
+            return see_other(&format!("/c/{code_id}"));
+        }
         return chooser(&state, &code_id).into_response();
     };
 
@@ -86,6 +165,17 @@ pub async fn landing(
     };
 
     let ctx = state.handler_ctx();
+
+    match handler.delegate(&ctx, &binding).await {
+        Err(error) => return handler_response(&error),
+        Ok(Some(next)) => return hand_off(&state, &code_id, next, hop.hop.unwrap_or(0)),
+        Ok(None) => {}
+    }
+
+    if hop.hop.is_some() {
+        return see_other(&format!("/c/{code_id}"));
+    }
+
     match handler.render(&ctx, &binding).await {
         Err(error) => handler_response(&error),
         Ok(HandlerPage::Response(response)) => response,
@@ -259,12 +349,23 @@ fn chooser(state: &AppState, code: &CodeId) -> impl IntoResponse {
                     ul class="cards" {
                         @for (id, card) in &cards {
                             li {
-                                form method="post" action={ "/c/" (code) "/api/v1/claim" } {
+                                form class=(if card.fields.0.is_empty() { "" } else { "has-fields" })
+                                    method="post" action={ "/c/" (code) "/api/v1/claim" } {
                                     input type="hidden" name="handler" value=(id.as_str());
-                                    button type="submit" {
-                                        span class="icon" { (card.icon) }
-                                        span class="title" { (card.title) }
-                                        span class="blurb" { (card.blurb) }
+                                    @if card.fields.0.is_empty() {
+                                        button type="submit" {
+                                            span class="icon" { (card.icon) }
+                                            span class="title" { (card.title) }
+                                            span class="blurb" { (card.blurb) }
+                                        }
+                                    } @else {
+                                        div class="card-body" {
+                                            span class="icon" { (card.icon) }
+                                            span class="title" { (card.title) }
+                                            span class="blurb" { (card.blurb) }
+                                        }
+                                        (card.fields)
+                                        button type="submit" class="card-claim" { "Use this" }
                                     }
                                 }
                             }
@@ -367,7 +468,10 @@ pub async fn claim(
     };
 
     let config = match handler
-        .validate_config(body.config.unwrap_or_else(|| handler.default_config()))
+        .validate_config(
+            &state.handler_ctx(),
+            body.config.unwrap_or_else(|| handler.default_config()),
+        )
         .await
     {
         Ok(config) => config,
@@ -461,7 +565,37 @@ fn see_other(location: &str) -> Response {
 ///
 /// Both, because the chooser works without script and the client sends JSON. One
 /// extractor rather than two routes, so there is one code path to get right.
+///
+/// A form cannot express a nested object, so a field named `config.code` becomes
+/// `{"code": …}`. That is what lets a handler put its own inputs on the chooser card and
+/// still be claimed by a browser with no script.
 pub struct ClaimForm(pub ClaimBody);
+
+impl ClaimBody {
+    fn from_pairs(pairs: HashMap<String, String>) -> Self {
+        let mut handler = String::new();
+        let mut title = None;
+        let mut config = serde_json::Map::new();
+
+        for (key, value) in pairs {
+            match key.as_str() {
+                "handler" => handler = value,
+                "title" if !value.is_empty() => title = Some(value),
+                _ => {
+                    if let Some(name) = key.strip_prefix("config.") {
+                        config.insert(name.to_owned(), serde_json::Value::String(value));
+                    }
+                }
+            }
+        }
+
+        Self {
+            handler,
+            config: (!config.is_empty()).then_some(serde_json::Value::Object(config)),
+            title,
+        }
+    }
+}
 
 impl<S: Send + Sync> axum::extract::FromRequest<S> for ClaimForm {
     type Rejection = Response;
@@ -482,9 +616,9 @@ impl<S: Send + Sync> axum::extract::FromRequest<S> for ClaimForm {
                 .map(|Json(body)| Self(body))
                 .map_err(IntoResponse::into_response)
         } else {
-            axum::extract::Form::<ClaimBody>::from_request(request, state)
+            axum::extract::Form::<HashMap<String, String>>::from_request(request, state)
                 .await
-                .map(|axum::extract::Form(body)| Self(body))
+                .map(|axum::extract::Form(pairs)| Self(ClaimBody::from_pairs(pairs)))
                 .map_err(IntoResponse::into_response)
         }
     }

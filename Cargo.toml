@@ -17,6 +17,7 @@ qr-core = { version = "0.1.1", path = "crates/qr-core" }
 qr-handler = { version = "0.1.1", path = "crates/qr-handler" }
 qr-photos = { version = "0.1.1", path = "crates/qr-photos" }
 qr-forward = { version = "0.1.1", path = "crates/qr-forward" }
+qr-link = { version = "0.1.1", path = "crates/qr-link" }
 qr-sheet = { version = "0.1.1", path = "crates/qr-sheet" }
 
 async-trait = "0.1.92"

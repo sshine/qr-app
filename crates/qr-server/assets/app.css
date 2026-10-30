@@ -148,6 +148,43 @@ button,
   padding: 1rem;
 }
 
+/* A card that needs a value before it can be claimed: the text sits above its own
+ * inputs instead of inside the button that submits them. */
+.cards form.has-fields {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding-bottom: 0.5rem;
+}
+
+.cards .card-body {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0 var(--gap);
+  padding: 1rem;
+}
+
+.cards .card-body .icon {
+  grid-row: span 2;
+}
+
+.cards .link-fields {
+  padding: 0 1rem;
+}
+
+.cards .link-fields label:last-child {
+  margin-bottom: 0.25rem;
+}
+
+.cards button.card-claim {
+  width: auto;
+  display: inline-block;
+  margin: 0.5rem 1rem 0;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
 .cards .icon {
   grid-row: span 2;
   width: 2rem;
@@ -179,7 +216,8 @@ label {
 }
 
 input[type="url"],
-input[type="text"] {
+input[type="text"],
+.link-fields input {
   display: block;
   width: 100%;
   font: inherit;

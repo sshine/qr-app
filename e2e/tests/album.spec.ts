@@ -29,7 +29,7 @@ test.describe("photo album", () => {
   // rendered from the server's list. If the two are not the same list, the upload
   // succeeds and the page never shows it.
   test("an uploaded photo appears without reloading", async ({ page }) => {
-    await album(page, codes()[0]);
+    await album(page, codes()[2]);
     await expect(page.locator("ul.grid li.tile")).toHaveCount(0);
 
     await page
@@ -46,7 +46,7 @@ test.describe("photo album", () => {
   test("deleting a photo updates the page rather than navigating away", async ({
     page,
   }) => {
-    await album(page, codes()[1]);
+    await album(page, codes()[3]);
     await page
       .locator('form.capture input[type="file"]')
       .first()
@@ -69,7 +69,7 @@ test.describe("photo album", () => {
 test("a code that has been opened is offered again on the landing page", async ({
   page,
 }) => {
-  const code = codes()[2];
+  const code = codes()[4];
   await page.goto(`/c/${code.id}#${code.secret}`);
   await expect(page.locator("main.chooser")).toBeVisible();
 

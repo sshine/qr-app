@@ -61,6 +61,17 @@ pub struct Binding {
     pub released_at: Option<DateTime<Utc>>,
 }
 
+/// A sticker that stands in for another one.
+///
+/// The secret is kept so a scan of the link can hand the visitor the target's cookie
+/// without asking for it again. It is deliberately not `Serialize`: nothing outside the
+/// store should be able to turn it into JSON by deriving a trait.
+#[derive(Debug, Clone)]
+pub struct CodeLink {
+    pub target: CodeId,
+    pub secret: Secret,
+}
+
 /// A stored blob's metadata.
 #[derive(Debug, Clone)]
 pub struct BlobRecord {

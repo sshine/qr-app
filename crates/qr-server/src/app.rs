@@ -317,5 +317,6 @@ pub fn registry() -> Result<Registry, qr_handler::registry::DuplicateHandler> {
     Ok(Registry::builder()
         .register(qr_photos::PhotoAlbum)?
         .register(qr_forward::ForwardHandler)?
+        .register(qr_link::LinkHandler)?
         .build())
 }

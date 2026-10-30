@@ -73,6 +73,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "qr-link" = rec {
+      packageId = "qr-link";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "qr-link";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "qr-photos" = rec {
       packageId = "qr-photos";
       build = internal.buildRustCrateWithFeatures {
@@ -6970,6 +6980,83 @@ rec {
         ];
 
       };
+      "qr-link" = rec {
+        crateName = "qr-link";
+        version = "0.1.1";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/qr-link; };
+        libName = "qr_link";
+        license = "MIT OR Apache-2.0";
+        dependencies = [
+          {
+            name = "async-trait";
+            packageId = "async-trait";
+          }
+          {
+            name = "axum";
+            packageId = "axum";
+            usesDefaultFeatures = false;
+            features = [ "http1" "json" "tokio" ];
+          }
+          {
+            name = "chrono";
+            packageId = "chrono";
+            usesDefaultFeatures = false;
+            features = [ "clock" "serde" "std" ];
+          }
+          {
+            name = "maud";
+            packageId = "maud";
+            usesDefaultFeatures = false;
+            features = [ "axum" ];
+          }
+          {
+            name = "qr-core";
+            packageId = "qr-core";
+          }
+          {
+            name = "qr-handler";
+            packageId = "qr-handler";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "derive" "std" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "sqlx";
+            packageId = "sqlx";
+            usesDefaultFeatures = false;
+            features = [ "chrono" "postgres" "runtime-tokio" "uuid" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+          {
+            name = "uuid";
+            packageId = "uuid";
+            usesDefaultFeatures = false;
+            features = [ "serde" "std" "v7" ];
+          }
+        ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "macros" "rt-multi-thread" ];
+          }
+        ];
+
+      };
       "qr-photos" = rec {
         crateName = "qr-photos";
         version = "0.1.1";
@@ -7159,6 +7246,10 @@ rec {
           {
             name = "qr-handler";
             packageId = "qr-handler";
+          }
+          {
+            name = "qr-link";
+            packageId = "qr-link";
           }
           {
             name = "qr-photos";

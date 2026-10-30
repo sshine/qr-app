@@ -1,0 +1,33 @@
+[package]
+name = "qr-link"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The linking handler: a sticker that stands in for another one"
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["http1", "json", "tokio"] }
+chrono = { workspace = true, features = ["clock", "serde", "std"] }
+maud = { workspace = true, features = ["axum"] }
+qr-core = { workspace = true }
+qr-handler = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+sqlx = { workspace = true, features = [
+  "chrono",
+  "postgres",
+  "runtime-tokio",
+  "uuid",
+] }
+tracing = { workspace = true }
+uuid = { workspace = true, features = ["serde", "std", "v7"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
