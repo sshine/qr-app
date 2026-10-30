@@ -21,7 +21,7 @@ pub use state::{AppState, CookieConfig, HandlerCtx, Limits};
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 
 /// Builds the whole `/c` subtree.
@@ -43,6 +43,7 @@ pub fn mount(state: AppState) -> Router {
     let mut guarded = Router::new()
         .route("/c/{code}/manage", get(routes::manage))
         .route("/c/{code}/location", get(routes::location_page))
+        .route("/c/{code}/tags", get(routes::tags_page))
         .route("/c/{code}/api/v1/state", get(routes::code_state))
         .route("/c/{code}/api/v1/claim", post(routes::claim))
         .route("/c/{code}/api/v1/recover", post(routes::recover))
@@ -52,6 +53,16 @@ pub fn mount(state: AppState) -> Router {
             post(routes::clear_location),
         )
         .route("/c/{code}/api/v1/locations", get(routes::list_locations))
+        .route(
+            "/c/{code}/api/v1/tags",
+            get(routes::list_tags).post(routes::add_tag),
+        )
+        .route("/c/{code}/api/v1/tags/add", post(routes::add_tag_form))
+        .route("/c/{code}/api/v1/tags/{tag}", delete(routes::remove_tag))
+        .route(
+            "/c/{code}/api/v1/tags/{tag}/remove",
+            post(routes::remove_tag_form),
+        )
         .route("/c/{code}/api/v1/release", post(routes::release));
 
     for handler in state.registry().iter() {

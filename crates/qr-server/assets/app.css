@@ -422,6 +422,99 @@ input[type="text"] {
   white-space: nowrap;
 }
 
+/* Tags on the bar and in the picker. A tag is a word a box can carry, so it is shown as
+ * a pill rather than as another line of prose. */
+.code-controls .tagged.tags {
+  padding-left: 0.15rem;
+}
+
+.tags-modal {
+  max-width: 32rem;
+}
+
+.tags-modal .hint {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.tag-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-height: 2rem;
+  margin: 0.75rem 0;
+}
+
+.tag-chip,
+.tag-suggestion {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tag-suggestions {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag-suggestion {
+  border-color: var(--line);
+  background: transparent;
+}
+
+.tag-suggestion:hover,
+.tag-chip:hover {
+  border-color: var(--accent);
+}
+
+.tag-create {
+  margin-top: 0.5rem;
+}
+
+.tags-page section {
+  margin-top: 1.5rem;
+}
+
+.tags-page h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.tag-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.tag-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
 /* Where a sticker is. */
 .location section {
   margin-top: 1.5rem;

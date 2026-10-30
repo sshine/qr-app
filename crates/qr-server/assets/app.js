@@ -133,17 +133,126 @@
     // The bar every issued code carries. Release lives behind a dialog because it is
     // the one control that changes what a scan does; the dialog says that the photos
     // and history are kept before the form is submitted.
-    Alpine.data("codeControls", () => ({
-      releaseOpen: false,
+    //
+    // Tags are the other dialog. It takes the current tags from the hydration payload
+    // and then re-reads both the sticker's tags and the shared catalog after every
+    // change, so a tag created on one sticker is pickable on the next without a reload.
+    Alpine.data("codeControls", () => {
+      const tags = Array.isArray(boot.tags) ? boot.tags : [];
 
-      openRelease() {
-        this.releaseOpen = true;
-      },
+      return {
+        releaseOpen: false,
+        tagsOpen: false,
 
-      closeRelease() {
-        this.releaseOpen = false;
-      },
-    }));
+        current: tags,
+        catalog: [],
+        matches: [],
+        query: "",
+        noCurrent: tags.length === 0,
+        noMatches: false,
+        tagsLabel: tags.map((tag) => tag.name).join(" · "),
+        busy: false,
+        hasError: false,
+        error: "",
+
+        openRelease() {
+          this.releaseOpen = true;
+        },
+
+        closeRelease() {
+          this.releaseOpen = false;
+        },
+
+        async openTags() {
+          this.tagsOpen = true;
+          this.query = "";
+          this.hasError = false;
+          this.error = "";
+          await this.loadTags();
+        },
+
+        closeTags() {
+          this.tagsOpen = false;
+        },
+
+        async loadTags() {
+          try {
+            const response = await fetch(`/c/${boot.code}/api/v1/tags`);
+            if (!response.ok) throw new Error((await response.text()).trim());
+            this.applyTags(await response.json());
+          } catch (e) {
+            this.fail(e);
+          }
+        },
+
+        applyTags(data) {
+          this.current = data.tags ?? [];
+          this.catalog = data.catalog ?? [];
+          this.tagsLabel = this.current.map((tag) => tag.name).join(" · ");
+          this.noCurrent = this.current.length === 0;
+          this.searchTags();
+        },
+
+        /** The suggestions are the catalog minus what is already on this sticker. */
+        searchTags() {
+          const query = this.query.trim().toLowerCase();
+          const held = new Set(this.current.map((tag) => tag.id));
+          this.matches = this.catalog
+            .filter(
+              (tag) =>
+                !held.has(tag.id) &&
+                (!query || tag.name.toLowerCase().includes(query)),
+            )
+            .slice(0, 8);
+          this.noMatches = this.matches.length === 0;
+        },
+
+        async addTag(event) {
+          await this.writeTag("POST", { id: event.currentTarget.dataset.tag });
+        },
+
+        async createTag() {
+          const name = this.query.trim();
+          if (!name) return;
+          await this.writeTag("POST", { name });
+          this.query = "";
+        },
+
+        async removeTag(event) {
+          const id = event.currentTarget.dataset.tag;
+          await this.writeTag("DELETE", null, id);
+        },
+
+        async writeTag(method, body, id) {
+          this.busy = true;
+          this.hasError = false;
+          try {
+            const path = id
+              ? `/c/${boot.code}/api/v1/tags/${id}`
+              : `/c/${boot.code}/api/v1/tags`;
+            const response = await fetch(path, {
+              method,
+              headers:
+                method === "POST"
+                  ? { "content-type": "application/json" }
+                  : undefined,
+              body: body ? JSON.stringify(body) : undefined,
+            });
+            if (!response.ok) throw new Error((await response.text()).trim());
+            this.applyTags(await response.json());
+          } catch (e) {
+            this.fail(e);
+          } finally {
+            this.busy = false;
+          }
+        },
+
+        fail(e) {
+          this.hasError = true;
+          this.error = String(e.message ?? e).trim();
+        },
+      };
+    });
 
     // The link card's camera. The decoder is jsQR over frames from the video element;
     // the only thing this component puts in the form is the pair it has actually read,

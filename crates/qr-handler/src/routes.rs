@@ -10,14 +10,14 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use maud::html;
-use qr_core::{Binding, CodeId, Location, NewLocation, Secret, model::EventKind, store};
+use qr_core::{Binding, CodeId, Location, NewLocation, Secret, Tag, model::EventKind, store};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
     HandlerPage,
-    capability::{self, CodeCtx},
+    capability::{self, CodeAccess, CodeCtx},
     handler::Delegate,
     shell::{self, Page},
     state::AppState,
@@ -129,12 +129,23 @@ fn looped(from: &CodeId) -> Response {
 /// them back. Scripted visitors get the dialog; `<noscript>` gets the same form and the
 /// same sentence, because a control that only works with script would be a second-class
 /// way to lose a box.
-fn controls(code: &CodeId, managing: bool, location: Option<&Location>) -> maud::Markup {
+fn controls(
+    code: &CodeId,
+    managing: bool,
+    location: Option<&Location>,
+    tags: &[Tag],
+) -> maud::Markup {
+    let tag_names = tags
+        .iter()
+        .map(|tag| tag.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" · ");
+
     html! {
-        // The dialog is a sibling of the bar rather than a child. The bar has a
+        // The dialogs are siblings of the bar rather than children. The bar has a
         // backdrop-filter, which makes it the containing block for fixed descendants; a
         // modal inside it would be fixed to the bar, not the viewport. The wrapper is
-        // what shares the Alpine component between the two.
+        // what shares the Alpine component between them.
         div x-data="codeControls" {
             nav class="code-controls" aria-label="This code" {
                 @if managing {
@@ -146,9 +157,14 @@ fn controls(code: &CodeId, managing: bool, location: Option<&Location>) -> maud:
                 @if let Some(location) = location {
                     span class="tagged" { (location.name) }
                 }
+                span class="tagged tags" x-show="tagsLabel" x-text="tagsLabel" {
+                    (tag_names)
+                }
+                button type="button" class="control" x-on:click="openTags" { "Tags" }
                 button type="button" class="control" x-on:click="openRelease" { "Release" }
 
                 noscript {
+                    a class="control" href={ "/c/" (code) "/tags" } { "Tags without script" }
                     form class="noscript-release" method="post"
                         action={ "/c/" (code) "/api/v1/release" } {
                         span { "Release this code? Its photos and history are kept." }
@@ -174,6 +190,64 @@ fn controls(code: &CodeId, managing: bool, location: Option<&Location>) -> maud:
                             form method="post" action={ "/c/" (code) "/api/v1/release" } {
                                 button type="submit" class="danger" { "Release this code" }
                             }
+                        }
+                    }
+                }
+            }
+
+            // Tags are picked from the shared catalog or created inline. The network is
+            // the source of truth after every change, so two stickers open in two tabs
+            // do not each keep a stale catalog.
+            template "x-if"="tagsOpen" {
+                div class="modal-backdrop" {
+                    div class="modal tags-modal" role="dialog" aria-modal="true"
+                        aria-labelledby="tags-title" {
+                        h2 id="tags-title" { "Tags" }
+                        p class="hint" {
+                            "Pick a tag this sticker belongs to, or type a new one."
+                        }
+
+                        div class="tag-current" {
+                            template "x-for"="tag in current" ":key"="tag.id" {
+                                button type="button" class="tag-chip"
+                                    "x-bind:data-tag"="tag.id"
+                                    "x-on:click"="removeTag" {
+                                    span x-text="tag.name" {}
+                                    span aria-hidden="true" { " ×" }
+                                }
+                            }
+                            p class="empty" x-show="noCurrent" { "No tags yet." }
+                        }
+
+                        form class="tag-create" "x-on:submit.prevent"="createTag" {
+                            label {
+                                "Add a tag"
+                                input type="text" x-model="query" maxlength="40"
+                                    autocomplete="off" spellcheck="false"
+                                    placeholder="Loft" x-on:input="searchTags";
+                            }
+                            ul class="tag-suggestions" {
+                                template "x-for"="tag in matches" ":key"="tag.id" {
+                                    li {
+                                        button type="button" class="tag-suggestion"
+                                            "x-bind:data-tag"="tag.id"
+                                            "x-on:click"="addTag" {
+                                            span x-text="tag.name" {}
+                                        }
+                                    }
+                                }
+                            }
+                            p class="empty" x-show="noMatches" {
+                                "No matching tag. Create it below."
+                            }
+                            button type="submit" "x-bind:disabled"="busy" {
+                                "Create tag"
+                            }
+                        }
+
+                        p class="error" role="alert" x-show="hasError" x-text="error" {}
+                        div class="modal-actions" {
+                            button type="button" x-on:click="closeTags" { "Done" }
                         }
                     }
                 }
@@ -207,6 +281,9 @@ pub async fn manage(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> 
             let location = store::code_location(state.store().pool(), &access.code.id)
                 .await
                 .unwrap_or(None);
+            let tags = store::code_tags(state.store().pool(), &access.code.id)
+                .await
+                .unwrap_or_default();
             shell::render(
                 Page::new(
                     binding
@@ -214,7 +291,7 @@ pub async fn manage(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> 
                         .clone()
                         .unwrap_or_else(|| handler.name().to_owned()),
                     html! {
-                        (controls(&access.code.id, true, location.as_ref()))
+                        (controls(&access.code.id, true, location.as_ref(), &tags))
                         (body)
                     },
                 )
@@ -222,6 +299,7 @@ pub async fn manage(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> 
                     "code": access.code.id.as_str(),
                     "handler": binding.handler_id,
                     "state": described,
+                    "tags": tags,
                 })),
             )
             .into_response()
@@ -312,13 +390,16 @@ pub async fn location_page(CodeCtx(access): CodeCtx, State(state): State<AppStat
     let catalog = store::locations(state.store().pool())
         .await
         .unwrap_or_default();
+    let tags = store::code_tags(state.store().pool(), &access.code.id)
+        .await
+        .unwrap_or_default();
     let code = &access.code.id;
 
     shell::render(
         Page::new(
             "Location",
             html! {
-                (controls(code, false, current.as_ref()))
+                (controls(code, false, current.as_ref(), &tags))
                 main class="location" {
                     h1 { "Where is this code?" }
                     p class="code-id" { (code.grouped()) }
@@ -400,7 +481,7 @@ pub async fn location_page(CodeCtx(access): CodeCtx, State(state): State<AppStat
                 }
             },
         )
-        .with_state(json!({ "code": code.as_str() })),
+        .with_state(json!({ "code": code.as_str(), "tags": tags })),
     )
     .into_response()
 }
@@ -520,6 +601,234 @@ pub async fn list_locations(State(state): State<AppState>) -> Response {
     }
 }
 
+#[derive(Deserialize)]
+pub struct TagBody {
+    #[serde(default)]
+    pub id: Option<Uuid>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// The current tags and the whole catalog, which is what the reactive picker needs.
+async fn tag_state(state: &AppState, code: &CodeId) -> qr_core::Result<(Vec<Tag>, Vec<Tag>)> {
+    let current = store::code_tags(state.store().pool(), code).await?;
+    let catalog = store::tags(state.store().pool()).await?;
+    Ok((current, catalog))
+}
+
+fn tags_json(current: Vec<Tag>, catalog: Vec<Tag>) -> Response {
+    Json(json!({ "tags": current, "catalog": catalog })).into_response()
+}
+
+/// `GET /c/{code}/api/v1/tags` — what is on this sticker, and what could be.
+pub async fn list_tags(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
+    match tag_state(&state, &access.code.id).await {
+        Ok((current, catalog)) => tags_json(current, catalog),
+        Err(error) => store_response(&error),
+    }
+}
+
+/// `POST /c/{code}/api/v1/tags` — attach one by id, or create it from a name first.
+pub async fn add_tag(
+    CodeCtx(access): CodeCtx,
+    State(state): State<AppState>,
+    Json(body): Json<TagBody>,
+) -> Response {
+    attach_tag(&state, &access, body).await
+}
+
+/// The same, for the no-script page's form.
+pub async fn add_tag_form(
+    CodeCtx(access): CodeCtx,
+    State(state): State<AppState>,
+    Form(body): Form<TagBody>,
+) -> Response {
+    match attach_tag(&state, &access, body).await {
+        response if response.status().is_success() => {
+            see_other(&format!("/c/{}/tags", access.code.id))
+        }
+        response => response,
+    }
+}
+
+async fn attach_tag(state: &AppState, access: &CodeAccess, body: TagBody) -> Response {
+    let result = async {
+        let mut tx = state.store().begin().await?;
+
+        let tag = match (body.id, body.name.as_deref().map(str::trim)) {
+            (Some(id), _) => store::tag(&mut *tx, id)
+                .await?
+                .ok_or_else(|| qr_core::Error::NotFound("tag"))?,
+            (None, Some(name)) if !name.is_empty() && name.chars().count() <= 40 => {
+                store::tag_named(&mut *tx, name).await?
+            }
+            (None, Some(_)) => {
+                return Err(qr_core::Error::Invalid(
+                    "a tag needs a name of at most 40 characters".to_owned(),
+                ));
+            }
+            (None, None) => {
+                return Err(qr_core::Error::Invalid(
+                    "an id or a name is needed".to_owned(),
+                ));
+            }
+        };
+
+        store::add_code_tag(&mut *tx, &access.code.id, tag.id).await?;
+        store::record_event(
+            &mut *tx,
+            EventKind::TagAdded,
+            Some(&access.code.id),
+            access.binding.as_ref().map(|binding| binding.id),
+            &json!({ "tag": tag.id, "name": tag.name }),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+
+    match result {
+        Ok(()) => match tag_state(state, &access.code.id).await {
+            Ok((current, catalog)) => tags_json(current, catalog),
+            Err(error) => store_response(&error),
+        },
+        Err(error) => store_response(&error),
+    }
+}
+
+/// `DELETE /c/{code}/api/v1/tags/{tag}` — take a tag off this sticker.
+pub async fn remove_tag(
+    CodeCtx(access): CodeCtx,
+    State(state): State<AppState>,
+    Path((_code, tag)): Path<(String, Uuid)>,
+) -> Response {
+    detach_tag(&state, &access, tag).await
+}
+
+/// The form version, which cannot send DELETE.
+pub async fn remove_tag_form(
+    CodeCtx(access): CodeCtx,
+    State(state): State<AppState>,
+    Path((_code, tag)): Path<(String, Uuid)>,
+) -> Response {
+    match detach_tag(&state, &access, tag).await {
+        response if response.status().is_success() => {
+            see_other(&format!("/c/{}/tags", access.code.id))
+        }
+        response => response,
+    }
+}
+
+async fn detach_tag(state: &AppState, access: &CodeAccess, tag: Uuid) -> Response {
+    let result = async {
+        let mut tx = state.store().begin().await?;
+        store::remove_code_tag(&mut *tx, &access.code.id, tag).await?;
+        store::record_event(
+            &mut *tx,
+            EventKind::TagRemoved,
+            Some(&access.code.id),
+            access.binding.as_ref().map(|binding| binding.id),
+            &json!({ "tag": tag }),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+
+    match result {
+        Ok(()) => match tag_state(state, &access.code.id).await {
+            Ok((current, catalog)) => tags_json(current, catalog),
+            Err(error) => store_response(&error),
+        },
+        Err(error) => store_response(&error),
+    }
+}
+
+/// `GET /c/{code}/tags` — the same picker, usable without script.
+pub async fn tags_page(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
+    let Some(_binding) = access.binding else {
+        return see_other(&format!("/c/{}", access.code.id));
+    };
+
+    let current = store::code_tags(state.store().pool(), &access.code.id)
+        .await
+        .unwrap_or_default();
+    let catalog = store::tags(state.store().pool()).await.unwrap_or_default();
+    let location = store::code_location(state.store().pool(), &access.code.id)
+        .await
+        .unwrap_or(None);
+    let code = &access.code.id;
+    let available = catalog
+        .iter()
+        .filter(|tag| !current.iter().any(|held| held.id == tag.id))
+        .collect::<Vec<_>>();
+
+    shell::render(
+        Page::new(
+            "Tags",
+            html! {
+                (controls(code, false, location.as_ref(), &current))
+                main class="tags-page" {
+                    h1 { "Tags" }
+                    p class="code-id" { (code.grouped()) }
+
+                    section {
+                        h2 { "On this sticker" }
+                        @if current.is_empty() {
+                            p class="empty" { "No tags yet." }
+                        } @else {
+                            ul class="tag-list" {
+                                @for tag in &current {
+                                    li {
+                                        span { (tag.name) }
+                                        form method="post"
+                                            action={ "/c/" (code) "/api/v1/tags/" (tag.id) "/remove" } {
+                                            button type="submit" { "Remove" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    section {
+                        h2 { "Add a tag" }
+                        form method="post" action={ "/c/" (code) "/api/v1/tags/add" } {
+                            label {
+                                "New tag"
+                                input name="name" maxlength="40" required
+                                    autocomplete="off" spellcheck="false"
+                                    placeholder="Loft";
+                            }
+                            button type="submit" { "Add" }
+                        }
+
+                        @if !available.is_empty() {
+                            form method="post" action={ "/c/" (code) "/api/v1/tags/add" } {
+                                label {
+                                    "Existing tag"
+                                    select name="id" required {
+                                        @for tag in &available {
+                                            option value=(tag.id) { (tag.name) }
+                                        }
+                                    }
+                                }
+                                button type="submit" { "Add existing" }
+                            }
+                        }
+                    }
+
+                    p { a href={ "/c/" (code) } { "Back to the sticker" } }
+                }
+            },
+        )
+        .with_state(json!({ "code": code.as_str(), "tags": current })),
+    )
+    .into_response()
+}
+
 /// `GET /c/{code}` — the page a scan lands on.
 ///
 /// Unguarded on purpose: this is the one route that has to answer before a cookie
@@ -590,6 +899,9 @@ pub async fn landing(
             let location = store::code_location(state.store().pool(), &code_id)
                 .await
                 .unwrap_or(None);
+            let tags = store::code_tags(state.store().pool(), &code_id)
+                .await
+                .unwrap_or_default();
             shell::render(
                 Page::new(
                     binding
@@ -597,7 +909,7 @@ pub async fn landing(
                         .clone()
                         .unwrap_or_else(|| handler.name().to_owned()),
                     html! {
-                        (controls(&code_id, false, location.as_ref()))
+                        (controls(&code_id, false, location.as_ref(), &tags))
                         (body)
                     },
                 )
@@ -605,6 +917,7 @@ pub async fn landing(
                     "code": code_id.as_str(),
                     "handler": binding.handler_id,
                     "state": described,
+                    "tags": tags,
                 }))
                 .with_head(handler.head()),
             )

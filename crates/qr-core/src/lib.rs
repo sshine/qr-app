@@ -19,7 +19,7 @@ pub use blob::{BlobKey, BlobRead, BlobStore, FsBlobStore};
 pub use error::{Error, Result};
 pub use ids::{CodeId, Secret, SecretHash, decoy_hash};
 pub use model::{
-    Binding, BlobRecord, Code, CodeLink, EventKind, Location, MintedCode, NewLocation, Sheet,
+    Binding, BlobRecord, Code, CodeLink, EventKind, Location, MintedCode, NewLocation, Sheet, Tag,
 };
 pub use store::Store;
 pub use url::BaseUrl;

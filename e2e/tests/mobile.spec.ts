@@ -116,17 +116,27 @@ test.describe("at phone width", () => {
     );
 
     // "Manage" and "Location" were adjacent words on the deployed app because the bar's
-    // flex gap was in the stylesheet the phone had not fetched.
-    const manage = await page.getByRole("link", { name: "Manage" }).boundingBox();
-    const location = await page.getByRole("link", { name: "Location" }).boundingBox();
-    const release = await page.getByRole("button", { name: "Release", exact: true }).boundingBox();
-    expect(location!.x, "Manage and Location are one word").toBeGreaterThan(
-      manage!.x + manage!.width + 4,
+    // flex gap was in the stylesheet the phone had not fetched. The bar may wrap now that
+    // Tags is a fifth control, so the property is reading order and separation, not one
+    // row.
+    const controls = await Promise.all(
+      ["Manage", "Location", "Tags", "Release"].map((name) =>
+        page.getByRole("link", { name }).or(page.getByRole("button", { name, exact: true })).boundingBox(),
+      ),
     );
-    expect(release!.x, "Location and Release are not separated").toBeGreaterThan(
-      location!.x + location!.width + 4,
-    );
-    expect(Math.abs(release!.y - manage!.y), "the control bar items are not one row").toBeLessThanOrEqual(1);
+    for (let i = 1; i < controls.length; i++) {
+      const previous = controls[i - 1]!;
+      const current = controls[i]!;
+      if (Math.abs(current.y - previous.y) <= 1) {
+        expect(current.x, "two controls are one word").toBeGreaterThan(
+          previous.x + previous.width + 4,
+        );
+      } else {
+        expect(current.y, "the control bar wrapped out of reading order").toBeGreaterThanOrEqual(
+          previous.y + previous.height - 1,
+        );
+      }
+    }
 
     // The dialog is an overlay, and it is not in the document before the button is
     // pressed. Read the failure: a dialog already present is the leaked-inline-modal

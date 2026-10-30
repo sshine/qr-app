@@ -14,6 +14,7 @@ use crate::{
     CodeId, Error, Result, Secret, SecretHash, decoy_hash,
     model::{
         Binding, BlobRecord, Code, CodeLink, EventKind, Location, MintedCode, NewLocation, Sheet,
+        Tag,
     },
 };
 
@@ -628,6 +629,125 @@ pub async fn set_code_location<'e, E: PgExecutor<'e>>(
     .execute(ex)
     .await?;
     Ok(())
+}
+
+/// The shared tag catalog, alphabetically.
+pub async fn tags<'e, E: PgExecutor<'e>>(ex: E) -> Result<Vec<Tag>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, name, created_at
+        FROM tags
+        ORDER BY lower(name), created_at
+        "#,
+    )
+    .fetch_all(ex)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Tag {
+            id: row.id,
+            name: row.name,
+            created_at: row.created_at,
+        })
+        .collect())
+}
+
+pub async fn tag<'e, E: PgExecutor<'e>>(ex: E, id: Uuid) -> Result<Option<Tag>> {
+    let row = sqlx::query!("SELECT id, name, created_at FROM tags WHERE id = $1", id,)
+        .fetch_optional(ex)
+        .await?;
+
+    Ok(row.map(|row| Tag {
+        id: row.id,
+        name: row.name,
+        created_at: row.created_at,
+    }))
+}
+
+/// The tag with this name, created if it did not exist.
+///
+/// Case-insensitive, and returns the existing spelling rather than the one just typed:
+/// two people tagging the same box should not make "Loft" and "loft" different tags.
+pub async fn tag_named<'e, E: PgExecutor<'e>>(ex: E, name: &str) -> Result<Tag> {
+    let row = sqlx::query!(
+        r#"
+        INSERT INTO tags (id, name) VALUES ($1, $2)
+        ON CONFLICT (lower(name)) DO UPDATE SET name = tags.name
+        RETURNING id, name, created_at
+        "#,
+        Uuid::now_v7(),
+        name,
+    )
+    .fetch_one(ex)
+    .await?;
+
+    Ok(Tag {
+        id: row.id,
+        name: row.name,
+        created_at: row.created_at,
+    })
+}
+
+/// The tags a sticker carries, alphabetically.
+pub async fn code_tags<'e, E: PgExecutor<'e>>(ex: E, code_id: &CodeId) -> Result<Vec<Tag>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT t.id, t.name, t.created_at
+        FROM code_tags ct
+        JOIN tags t ON t.id = ct.tag_id
+        WHERE ct.code_id = $1
+        ORDER BY lower(t.name), t.created_at
+        "#,
+        code_id.as_str(),
+    )
+    .fetch_all(ex)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Tag {
+            id: row.id,
+            name: row.name,
+            created_at: row.created_at,
+        })
+        .collect())
+}
+
+/// Attaches a tag. `false` means it was already there.
+pub async fn add_code_tag<'e, E: PgExecutor<'e>>(
+    ex: E,
+    code_id: &CodeId,
+    tag_id: Uuid,
+) -> Result<bool> {
+    let row = sqlx::query!(
+        r#"
+        INSERT INTO code_tags (code_id, tag_id) VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        RETURNING code_id
+        "#,
+        code_id.as_str(),
+        tag_id,
+    )
+    .fetch_optional(ex)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// Removes a tag. `false` means the sticker did not carry it.
+pub async fn remove_code_tag<'e, E: PgExecutor<'e>>(
+    ex: E,
+    code_id: &CodeId,
+    tag_id: Uuid,
+) -> Result<bool> {
+    let row = sqlx::query!(
+        "DELETE FROM code_tags WHERE code_id = $1 AND tag_id = $2 RETURNING code_id",
+        code_id.as_str(),
+        tag_id,
+    )
+    .fetch_optional(ex)
+    .await?;
+    Ok(row.is_some())
 }
 
 /// Records a blob's metadata. Idempotent, because the key is the content.

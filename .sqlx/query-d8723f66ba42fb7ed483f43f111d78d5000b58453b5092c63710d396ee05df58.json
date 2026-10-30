@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM code_tags WHERE code_id = $1 AND tag_id = $2 RETURNING code_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "code_tags",
+            "name": "code_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d8723f66ba42fb7ed483f43f111d78d5000b58453b5092c63710d396ee05df58"
+}

@@ -95,6 +95,17 @@ pub struct NewLocation {
     pub lon: f64,
 }
 
+/// A name a sticker can carry.
+///
+/// Shared between codes for the same reason [`Location`] is: picking an existing tag is
+/// faster and less error-prone than retyping a near-spelling of it on a phone.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Tag {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+}
+
 /// A stored blob's metadata.
 #[derive(Debug, Clone)]
 pub struct BlobRecord {
@@ -133,6 +144,8 @@ pub enum EventKind {
     ForwardFollowed,
     ForwardRepointed,
     LocationTagged,
+    TagAdded,
+    TagRemoved,
     BlobCollected,
 }
 
@@ -153,6 +166,8 @@ impl EventKind {
             Self::ForwardFollowed => "forward.followed",
             Self::ForwardRepointed => "forward.repointed",
             Self::LocationTagged => "location.tagged",
+            Self::TagAdded => "tag.added",
+            Self::TagRemoved => "tag.removed",
             Self::BlobCollected => "blob.collected",
         }
     }
@@ -185,6 +200,8 @@ mod tests {
             EventKind::ForwardFollowed,
             EventKind::ForwardRepointed,
             EventKind::LocationTagged,
+            EventKind::TagAdded,
+            EventKind::TagRemoved,
             EventKind::BlobCollected,
         ] {
             let s = kind.as_str();
