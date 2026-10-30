@@ -1,7 +1,7 @@
 //! The seam between what the service is and what a code does.
 //!
 //! A code is an anchor; a handler is something that claims one and owns everything
-//! under its prefix. Adding a third handler is a crate that depends on this one, not an
+//! under its prefix. Adding another handler is a crate that depends on this one, not an
 //! edit to the core, which is the whole reason this crate is separate from the binary.
 
 pub mod capability;
