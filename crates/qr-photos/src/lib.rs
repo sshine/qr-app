@@ -558,7 +558,11 @@ fn album(binding: &Binding, photos: &[Photo]) -> Markup {
                 template "x-for"="photo in photos" ":key"="photo.id" {
                     li class="tile" {
                         a "x-bind:href"="photo.view" {
-                            img "x-bind:src"="photo.thumb" loading="lazy" decoding="async"
+                            // The view size rather than the thumb: a photo is the width of
+                            // the screen now, and a 512px thumb stretched across a phone
+                            // is the one thing that would make the text on a label
+                            // unreadable.
+                            img "x-bind:src"="photo.view" loading="lazy" decoding="async"
                                 alt="a photo of the contents";
                         }
                         button type="button" class="tile-delete" aria-label="Delete"
@@ -575,7 +579,7 @@ fn album(binding: &Binding, photos: &[Photo]) -> Markup {
                     @for photo in photos {
                         li class="tile" {
                             a href=(media_url(code, photo.id, "view")) {
-                                img src=(media_url(code, photo.id, "thumb"))
+                                img src=(media_url(code, photo.id, "view"))
                                     width=(photo.width) height=(photo.height)
                                     loading="lazy" decoding="async"
                                     alt=(photo.caption.as_deref().unwrap_or("a photo of the contents"));

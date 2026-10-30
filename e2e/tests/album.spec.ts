@@ -51,7 +51,7 @@ test.describe("photo album", () => {
       .locator('form.capture input[type="file"]')
       .first()
       .setInputFiles({ name: "box.png", mimeType: "image/png", buffer: PNG });
-    await expect(page.locator("ul.grid li.tile")).toHaveCount(1);
+    await expect(page.locator("ul.grid li.tile:not(.pending)")).toHaveCount(1);
 
     const before = page.url();
     const download = page.waitForEvent("download", { timeout: 2000 }).catch(() => null);
@@ -60,6 +60,65 @@ test.describe("photo album", () => {
     await expect(page.locator("ul.grid li.tile")).toHaveCount(0);
     expect(page.url(), "navigated away from the album").toBe(before);
     expect(await download, "the browser was handed a file to save").toBeNull();
+  });
+
+  // A photo is the page. Read the failure: a width near zero means the tile kept its
+  // old square-grid sizing; a width that changes between the two orientations but not
+  // with the viewport means the image was sized in pixels rather than percentages.
+  test("a photo fills the width of the screen in either orientation", async ({
+    page,
+  }) => {
+    await album(page, codes()[9]);
+
+    await page
+      .locator('form.capture input[type="file"]')
+      .nth(1)
+      .setInputFiles([
+        { name: "one.png", mimeType: "image/png", buffer: PNG },
+        { name: "two.png", mimeType: "image/png", buffer: PNG },
+      ]);
+    await expect(page.locator("ul.grid li.tile:not(.pending)")).toHaveCount(2);
+
+    /** The image width, and what the content box allows: the viewport minus main's 1rem
+     * padding on each side. Scrollbars are why this cannot use `viewportSize()`. */
+    async function widths() {
+      const tiles = page.locator("ul.grid li.tile:not(.pending)");
+      const first = await tiles.nth(0).boundingBox();
+      const second = await tiles.nth(1).boundingBox();
+      const available = await page.evaluate(
+        () => document.documentElement.clientWidth - 32,
+      );
+      return { first, second, available };
+    }
+
+    const portrait = await widths();
+    expect(portrait.first, "the first photo is not laid out").not.toBeNull();
+    expect(portrait.second, "the second photo is not laid out").not.toBeNull();
+    for (const box of [portrait.first, portrait.second]) {
+      expect(
+        Math.abs(box!.width - portrait.available),
+        `a photo is ${box!.width}px wide, not the ${portrait.available}px the screen allows`,
+      ).toBeLessThanOrEqual(1);
+    }
+    expect(
+      portrait.second!.y,
+      "the photos are side by side; they should be rows",
+    ).toBeGreaterThanOrEqual(portrait.first!.y + portrait.first!.height - 1);
+
+    const size = page.viewportSize();
+    expect(size).not.toBeNull();
+    await page.setViewportSize({ width: size!.height, height: size!.width });
+
+    const landscape = await widths();
+    for (const box of [landscape.first, landscape.second]) {
+      expect(
+        Math.abs(box!.width - landscape.available),
+        `after turning the phone a photo is ${box!.width}px wide, not ${landscape.available}px`,
+      ).toBeLessThanOrEqual(1);
+    }
+    expect(landscape.available, "the viewport did not change").not.toBe(
+      portrait.available,
+    );
   });
 });
 

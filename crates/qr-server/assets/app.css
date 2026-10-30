@@ -89,18 +89,24 @@ button,
   padding: 0.85rem 1.25rem;
 }
 
+/* The album is the page, not a gallery inside one: a photo gets the whole width of the
+ * screen so a label or a part number is readable without pinching. The 1rem padding
+ * every `main` carries is kept as the margin; only the 48rem reading column is dropped. */
+main.album {
+  max-width: none;
+}
+
 .grid {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--gap);
 }
 
 .tile {
   position: relative;
-  aspect-ratio: 1;
   overflow: hidden;
   border-radius: var(--radius);
   background: var(--line);
@@ -108,8 +114,7 @@ button,
 
 .tile img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
   display: block;
 }
 
