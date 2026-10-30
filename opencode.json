@@ -1,0 +1,19 @@
+{
+  "mcp": {
+    "servers": {
+      "playwright-test": {
+        "type": "local",
+        "command": [
+          "direnv",
+          "exec",
+          ".",
+          "playwright",
+          "run-test-mcp-server",
+          "--headless",
+          "-c",
+          "e2e/playwright.config.ts"
+        ]
+      }
+    }
+  }
+}
