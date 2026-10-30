@@ -7198,6 +7198,11 @@ rec {
             features = [ "cookie" ];
           }
           {
+            name = "blake3";
+            packageId = "blake3";
+            usesDefaultFeatures = false;
+          }
+          {
             name = "chrono";
             packageId = "chrono";
             usesDefaultFeatures = false;
@@ -7336,9 +7341,21 @@ rec {
         ];
         devDependencies = [
           {
+            name = "image";
+            packageId = "image";
+            usesDefaultFeatures = false;
+            features = [ "png" ];
+          }
+          {
             name = "qr-core";
             packageId = "qr-core";
             features = [ "testing" ];
+          }
+          {
+            name = "qrcode";
+            packageId = "qrcode";
+            usesDefaultFeatures = false;
+            features = [ "image" ];
           }
           {
             name = "tempfile";
@@ -7438,11 +7455,25 @@ rec {
         authors = [
           "kennytm <kennytm@gmail.com>"
         ];
+        dependencies = [
+          {
+            name = "image";
+            packageId = "image";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "image";
+            packageId = "image";
+          }
+        ];
         features = {
           "default" = [ "image" "svg" "pic" ];
           "image" = [ "dep:image" ];
         };
-        resolvedDefaultFeatures = [ "svg" ];
+        resolvedDefaultFeatures = [ "image" "svg" ];
       };
       "quick-error" = rec {
         crateName = "quick-error";

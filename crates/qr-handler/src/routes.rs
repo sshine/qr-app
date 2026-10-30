@@ -796,7 +796,9 @@ async fn chooser(state: &AppState, code: &CodeId) -> Response {
                                             span class="blurb" { (card.blurb) }
                                         }
                                         (card.fields)
-                                        button type="submit" class="card-claim" { "Use this" }
+                                        @if card.submit {
+                                            button type="submit" class="card-claim" { "Use this" }
+                                        }
                                     }
                                 }
                             }

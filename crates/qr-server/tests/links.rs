@@ -216,6 +216,51 @@ async fn a_sticker_cannot_link_to_itself() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+/// The chooser cannot ask a visitor to transcribe a secret any more. It has to be the
+/// camera, and the confirmation that writes the decoded pair into the claim form must
+/// only exist as part of that flow.
+#[tokio::test]
+#[ignore = "needs a database"]
+async fn the_link_chooser_is_a_camera_and_not_typed_fields() {
+    let db = TestDb::create().await.expect("test database");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let router = support::router(&db, &dir).await;
+    let codes = support::mint(&db, 1).await;
+    let only = &codes[0];
+
+    let response = support::get(
+        &router,
+        &format!("/c/{}", only.id),
+        Some(support::cookie(&only.id, &only.secret)),
+    )
+    .await;
+    support::assert_status(&response, StatusCode::OK);
+    let body = support::text(response).await;
+
+    for expected in [
+        "x-data=\"linkScan\"",
+        "x-on:click=\"start\"",
+        "Use this sticker",
+        "name=\"config.code\"",
+        "name=\"config.secret\"",
+        "/assets/jsqr.js?v=",
+    ] {
+        assert!(
+            body.contains(expected),
+            "the link chooser is missing {expected}:\n{body}"
+        );
+    }
+
+    assert!(
+        !body.contains("Code on the other sticker"),
+        "the typed code field survived:\n{body}"
+    );
+    assert!(
+        !body.contains("type=\"text\""),
+        "the link chooser still has a typed input:\n{body}"
+    );
+}
+
 /// The chain bound must not be reachable through the redirect: a cycle of links would
 /// otherwise hang a browser that follows redirects forever.
 #[tokio::test]

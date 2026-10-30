@@ -18,6 +18,11 @@ pub struct ChooserCard {
     /// before it can be claimed. Names beginning `config.` become that handler's config,
     /// which is how a form post works without any JavaScript.
     pub fields: Markup,
+    /// Whether the chooser draws its own "Use this" submit button under `fields`.
+    ///
+    /// A handler that supplies its own confirmation, such as the link card's camera,
+    /// sets this false so a visitor cannot submit a half-scanned form.
+    pub submit: bool,
 }
 
 /// A target this handler hands the visitor over to.

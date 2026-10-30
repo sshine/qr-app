@@ -21,7 +21,7 @@ const PNG = Buffer.from(
 test.use({ viewport: { width: 390, height: 844 } });
 
 test.describe("at phone width", () => {
-  test("the link chooser is a card with versioned assets", async ({ page }) => {
+  test("the link chooser is a camera card with versioned assets", async ({ page }) => {
     const code = codes()[16];
     await page.goto(`/c/${code.id}#${code.secret}`);
 
@@ -45,18 +45,16 @@ test.describe("at phone width", () => {
       title!.y + title!.height - 1,
     );
 
-    const label = await card
-      .getByText("Code on the other sticker")
-      .boundingBox();
-    const input = await card.getByPlaceholder("ABCD 1234 EF").boundingBox();
-    expect(
-      input!.y - label!.y,
-      "the input is inline with its label",
-    ).toBeGreaterThan(24);
+    // The typed fields are gone; the card's one control is the camera.
+    await expect(card.locator('input[type="text"]')).toHaveCount(0);
+    await expect(card.locator("video")).toBeHidden();
 
-    const button = await card.getByRole("button", { name: "Use this" }).boundingBox();
+    const start = await card
+      .getByRole("button", { name: "Scan the other sticker" })
+      .boundingBox();
     const cardBox = await card.boundingBox();
-    expect(button!.width, "the submit button is full width").toBeLessThan(
+    expect(start!.height, "the camera button is below a thumb target").toBeGreaterThanOrEqual(44);
+    expect(start!.width, "the camera button is not the card's own width").toBeGreaterThan(
       cardBox!.width / 2,
     );
   });
@@ -84,8 +82,15 @@ test.describe("at phone width", () => {
       .setInputFiles({ name: "box.png", mimeType: "image/png", buffer: PNG });
     await expect(page.locator("ul.grid li.tile:not(.pending)")).toHaveCount(1);
 
+    // The tile exists as soon as the upload lands; the image inside it is still a
+    // separate request. Measuring before it has decoded reads height:auto as zero.
+    const photoImage = page.locator("ul.grid li.tile img").first();
+    await expect
+      .poll(() => photoImage.evaluate((img) => img.naturalWidth))
+      .toBeGreaterThan(0);
+
     // A photo is the width of the screen less main's 1rem padding on each side.
-    const photo = await page.locator("ul.grid li.tile img").first().boundingBox();
+    const photo = await photoImage.boundingBox();
     const available = await page.evaluate(
       () => document.documentElement.clientWidth - 32,
     );

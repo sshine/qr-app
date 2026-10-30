@@ -20,3 +20,21 @@ the `Alpine.data` components in `app.js`.
 
 Updating it means changing the version and the checksum here, in that order, and
 checking that no component started relying on an inline expression.
+
+## `vendor/jsqr.js`
+
+jsQR 1.4.0, from `https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js`.
+
+```
+sha256  bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859
+```
+
+License: Apache-2.0.
+
+The single-file UMD build. It exposes `window.jsQR`, which is what the link card's
+camera loop calls on frames from the video element. The source is vendored rather than
+loaded from a CDN so the decoder is part of the same immutable, content-versioned asset
+set as the rest of the shell: a deploy cannot pair new markup with an old decoder.
+
+Updating it means replacing the file, changing the version, source and checksum here,
+and re-running the link card's camera test.

@@ -99,6 +99,9 @@ pub fn render(page: Page) -> Markup {
             body {
                 (page.body)
                 script type="application/json" id=(STATE_ID) { (json_script(&page.state)) }
+                // The decoder the link card's camera loop calls. Versioned with the rest
+                // of the assets, so a deploy cannot pair new markup with an old decoder.
+                script src=(asset("jsqr.js")) defer {}
                 // app.js first: it registers every Alpine.data component from an
                 // alpine:init listener, and deferred scripts run in document order, so
                 // Alpine starting first would fire that event before anything is
@@ -149,6 +152,7 @@ mod tests {
             "/assets/app.css?v=a1b2c3d4e5f60718",
             "/assets/app.js?v=a1b2c3d4e5f60718",
             "/assets/alpine.js?v=a1b2c3d4e5f60718",
+            "/assets/jsqr.js?v=a1b2c3d4e5f60718",
             STATE_ID,
         ] {
             assert!(page.contains(expected), "the shell is missing {expected}");

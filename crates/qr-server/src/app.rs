@@ -28,9 +28,10 @@ use crate::{assets, cli::ServeArgs, sheet};
 /// No inline anything, and no 'unsafe-eval' — which is the whole reason Alpine's CSP
 /// build is the one vendored. `blob:` is what lets a photo appear in the grid before
 /// its upload has finished.
-const CSP: &str = "default-src 'none'; img-src 'self' blob: data:; script-src 'self'; \
-                   style-src 'self'; connect-src 'self'; form-action 'self'; \
-                   frame-ancestors 'none'; base-uri 'none'; manifest-src 'self'";
+const CSP: &str = "default-src 'none'; img-src 'self' blob: data:; media-src 'self' blob:; \
+                   script-src 'self'; style-src 'self'; connect-src 'self'; \
+                   form-action 'self'; frame-ancestors 'none'; base-uri 'none'; \
+                   manifest-src 'self'";
 
 /// Everything the public listener answers.
 pub fn router(state: AppState, sheets: sheet::routes::SheetState) -> Router {

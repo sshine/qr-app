@@ -192,12 +192,77 @@ main.album {
   grid-row: span 2;
 }
 
-.cards .link-fields {
-  padding: 0 1rem;
+/* The link card's camera. The viewfinder is the only place a camera stream is shown;
+ * the hidden config fields and the confirmation button appear only after a decode. */
+.cards .link-scan {
+  padding: 0 1rem 0.75rem;
 }
 
-.cards .link-fields label:last-child {
-  margin-bottom: 0.25rem;
+.cards .link-scan .hint,
+.cards .scan-status {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.cards .scan-start {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0.25rem 0 0;
+  padding: 0.6rem 1rem;
+  text-align: center;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.cards .scan-start:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.viewfinder {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 20rem;
+  margin-top: 0.25rem;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.viewfinder video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.viewfinder-frame {
+  position: absolute;
+  inset: 18%;
+  border: 2px solid rgb(255 255 255 / 85%);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 18%);
+  pointer-events: none;
+}
+
+.cards .scan-result {
+  margin-top: 0.5rem;
+}
+
+.cards .scan-found {
+  margin: 0 0 0.25rem;
+}
+
+.cards .scan-result .code-id {
+  margin: 0;
+  color: var(--fg);
 }
 
 .cards button.card-claim {
@@ -208,6 +273,22 @@ main.album {
   border-color: var(--accent);
   color: var(--bg);
   font-weight: 600;
+}
+
+.cards .scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.cards .scan-actions button {
+  width: auto;
+  display: inline-block;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  text-align: center;
 }
 
 .cards .icon {
@@ -241,8 +322,7 @@ label {
 }
 
 input[type="url"],
-input[type="text"],
-.link-fields input {
+input[type="text"] {
   display: block;
   width: 100%;
   font: inherit;

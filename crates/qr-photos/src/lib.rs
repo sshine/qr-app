@@ -51,6 +51,7 @@ impl Handler for PhotoAlbum {
             blurb: "Photograph what is in the box, and look at it again later.",
             icon: maud::PreEscaped(ICON),
             fields: html! {},
+            submit: true,
         }
     }
 

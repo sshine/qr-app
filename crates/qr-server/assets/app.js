@@ -51,6 +51,57 @@
     return true;
   }
 
+  /** The code and secret in a sticker's own URL, or null for any other QR. */
+  function stickerTarget(text) {
+    let url;
+    try {
+      url = new URL(text, location.origin);
+    } catch {
+      return null;
+    }
+
+    // A sticker encodes the whole redeem URL, and the path is uppercase because that is
+    // what keeps the symbol in QR alphanumeric mode. A browser may still hand it to us
+    // in either spelling after normalisation.
+    const match = /^\/[cC]\/([^/]+)$/.exec(url.pathname);
+    if (!match) return null;
+
+    const code = match[1].toUpperCase().replace(/[\s-]/g, "");
+    const secret = url.hash.slice(1).toUpperCase();
+    // The same bounds the server enforces. A stray poster or a website QR should not
+    // turn into a claim the server then has to refuse.
+    if (!/^[0-9A-Z]{6,12}$/.test(code)) return null;
+    if (!/^[0-9A-Z]{12,24}$/.test(secret)) return null;
+    return { code, secret };
+  }
+
+  /** The four-character groups the code is printed in. */
+  function groupCode(code) {
+    return code.replace(/(.{4})(?=.)/g, "$1 ");
+  }
+
+  /** Says what the visitor can do about each camera failure. */
+  function cameraMessage(error) {
+    switch (error && error.name) {
+      case "NotAllowedError":
+      case "SecurityError":
+        return "Camera permission was refused. Allow this page to use the camera in the browser's settings, then try again.";
+      case "NotFoundError":
+      case "OverconstrainedError":
+        return "No camera was found on this device.";
+      case "NotReadableError":
+        return "The camera is being used by another app. Close it and try again.";
+      case "NotSupportedError":
+        return "This browser cannot open a camera. Scanning needs a browser with camera support.";
+      default: {
+        const detail = String((error && error.message) || "").trim();
+        return detail
+          ? `The camera could not be started. ${detail}`
+          : "The camera could not be started. Try again.";
+      }
+    }
+  }
+
   document.addEventListener("alpine:init", () => {
     // The page served before a cookie exists. Its only job is the exchange above.
     // The landing page's list, read from this browser's own storage. The service has no
@@ -93,6 +144,149 @@
         this.releaseOpen = false;
       },
     }));
+
+    // The link card's camera. The decoder is jsQR over frames from the video element;
+    // the only thing this component puts in the form is the pair it has actually read,
+    // and only after the visitor confirms it.
+    Alpine.data("linkScan", () => {
+      // A MediaStream and a canvas are not reactive state: Alpine would proxy them and
+      // every brand-checked method on the stream would then see the proxy.
+      let stream = null;
+      let canvas = null;
+      let context = null;
+      let frame = 0;
+      let lastScan = 0;
+
+      function stop() {
+        if (frame) cancelAnimationFrame(frame);
+        frame = 0;
+        if (stream) {
+          for (const track of stream.getTracks()) track.stop();
+          stream = null;
+        }
+      }
+
+      return {
+        showStart: true,
+        showCamera: false,
+        showResult: false,
+        starting: false,
+        hasError: false,
+        error: "",
+        code: "",
+        secret: "",
+        codeDisplay: "",
+
+        async start() {
+          if (this.starting || this.showResult) return;
+          this.hasError = false;
+          this.error = "";
+          this.starting = true;
+
+          try {
+            if (
+              !navigator.mediaDevices ||
+              !navigator.mediaDevices.getUserMedia
+            ) {
+              throw Object.assign(new Error("no camera support"), {
+                name: "NotSupportedError",
+              });
+            }
+            if (typeof window.jsQR !== "function") {
+              throw new Error("the QR decoder did not load");
+            }
+
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
+              audio: false,
+            });
+
+            const video = this.$refs.video;
+            video.srcObject = stream;
+            await video.play();
+
+            this.showStart = false;
+            this.showCamera = true;
+            lastScan = 0;
+            frame = requestAnimationFrame(() => this.tick());
+          } catch (e) {
+            stop();
+            this.showCamera = false;
+            this.showStart = true;
+            this.hasError = true;
+            this.error = cameraMessage(e);
+          } finally {
+            this.starting = false;
+          }
+        },
+
+        /** Decodes at most ten frames a second; the camera runs faster than that. */
+        tick() {
+          if (!this.showCamera) return;
+          frame = requestAnimationFrame(() => this.tick());
+
+          const now = performance.now();
+          if (now - lastScan < 100) return;
+          lastScan = now;
+
+          const video = this.$refs.video;
+          if (!video || video.readyState < 2 || !video.videoWidth) return;
+
+          // Scaled down before decoding: a 1280-wide frame is more pixels than a QR
+          // needs and ten scans a second of it is not free on a phone.
+          const scale = Math.min(1, 640 / video.videoWidth);
+          const width = Math.round(video.videoWidth * scale);
+          const height = Math.round(video.videoHeight * scale);
+          if (!canvas) {
+            canvas = document.createElement("canvas");
+            context = canvas.getContext("2d", { willReadFrequently: true });
+          }
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+          if (!context) return;
+
+          context.drawImage(video, 0, 0, width, height);
+          const pixels = context.getImageData(0, 0, width, height);
+          const result = window.jsQR(pixels.data, pixels.width, pixels.height, {
+            inversionAttempts: "dontInvert",
+          });
+          if (!result) return;
+
+          const found = stickerTarget(result.data);
+          if (!found) return;
+
+          stop();
+          video.srcObject = null;
+          this.code = found.code;
+          this.secret = found.secret;
+          this.codeDisplay = groupCode(found.code);
+          this.showCamera = false;
+          this.showStart = false;
+          this.showResult = true;
+        },
+
+        reset() {
+          stop();
+          const video = this.$refs.video;
+          if (video) video.srcObject = null;
+          this.showStart = true;
+          this.showCamera = false;
+          this.showResult = false;
+          this.starting = false;
+          this.hasError = false;
+          this.error = "";
+          this.code = "";
+          this.secret = "";
+          this.codeDisplay = "";
+        },
+      };
+    });
 
     // A forward code shows where it goes for five seconds, then leaves. Staying cancels
     // the timer for good; without script the destination and Continue link are all that

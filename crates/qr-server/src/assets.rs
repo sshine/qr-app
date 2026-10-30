@@ -35,16 +35,23 @@ pub fn router() -> Router {
 ///
 /// Every page links to `/assets/<name>?v=<version>`, so a deploy that changes any asset
 /// changes the URL. That is what makes the service worker's cache-first rule safe: it
-/// cannot have the new bytes under a URL it has never seen. The version is the first
-/// four hex digits of each asset's SHA-256, in a fixed order.
+/// cannot have the new bytes under a URL it has never seen. The version is a BLAKE3 hash
+/// over every embedded asset's SHA-256, in a fixed order, so adding an asset cannot leave
+/// it outside the version by accident.
 pub fn version() -> String {
-    let mut out = String::new();
-    for name in ["app.css", "app.js", "vendor/alpine.js", "icon.svg"] {
+    let mut hasher = blake3::Hasher::new();
+    for name in [
+        "app.css",
+        "app.js",
+        "vendor/alpine.js",
+        "vendor/jsqr.js",
+        "icon.svg",
+    ] {
         if let Some(file) = Assets::get(name) {
-            out.push_str(&hex16(&file.metadata.sha256_hash())[..4]);
+            hasher.update(&file.metadata.sha256_hash());
         }
     }
-    out
+    hex16(hasher.finalize().as_bytes())
 }
 
 /// The URL the shell and the manifest should publish for an asset.
@@ -125,6 +132,10 @@ mod tests {
         assert!(
             Assets::get("vendor/alpine.js").is_some(),
             "the vendored Alpine build is not embedded"
+        );
+        assert!(
+            Assets::get("vendor/jsqr.js").is_some(),
+            "the vendored QR decoder is not embedded"
         );
     }
 

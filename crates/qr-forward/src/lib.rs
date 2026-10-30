@@ -48,6 +48,7 @@ impl Handler for ForwardHandler {
             blurb: "Send whoever scans this somewhere, and change where later.",
             icon: maud::PreEscaped(ICON),
             fields: html! {},
+            submit: true,
         }
     }
 

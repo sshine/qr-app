@@ -25,7 +25,7 @@ async fn a_page_publishes_versioned_assets_and_the_version_is_what_it_serves() {
     support::assert_status(&response, StatusCode::OK);
     let page = support::text(response).await;
 
-    for name in ["app.css", "app.js", "alpine.js"] {
+    for name in ["app.css", "app.js", "alpine.js", "jsqr.js"] {
         let url = format!("/assets/{name}?v={version}");
         assert!(
             page.contains(&url),
@@ -50,6 +50,16 @@ async fn a_page_publishes_versioned_assets_and_the_version_is_what_it_serves() {
     assert!(
         css.contains(".card-body"),
         "the served stylesheet is not the one the page was built with"
+    );
+
+    // The camera decoder is part of the versioned shell too, so a deploy cannot pair
+    // new markup with a decoder a warm cache has never seen.
+    let response = support::get(&router, &format!("/assets/jsqr.js?v={version}"), None).await;
+    support::assert_status(&response, StatusCode::OK);
+    let decoder = support::text(response).await;
+    assert!(
+        decoder.contains("jsQR"),
+        "the served decoder is not the vendored jsQR build"
     );
 
     let response = support::get(&router, "/manifest.webmanifest", None).await;

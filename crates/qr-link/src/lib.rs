@@ -51,9 +51,10 @@ impl Handler for LinkHandler {
     fn chooser(&self) -> ChooserCard {
         ChooserCard {
             title: "Link to other QR code",
-            blurb: "This sticker opens whatever the other sticker opens. Scan or type the other one.",
+            blurb: "This sticker opens whatever the other sticker opens. Point the camera at the other one.",
             icon: maud::PreEscaped(ICON),
             fields: fields(),
+            submit: false,
         }
     }
 
@@ -184,19 +185,52 @@ impl Handler for LinkHandler {
     }
 }
 
-/// The two inputs the chooser card carries, named so a form post becomes config.
+/// The camera the link card carries.
+///
+/// No typed code and no file picker: the proof has to come from the other sticker's own
+/// symbol. The hidden fields are filled only after a decode, and the confirmation button
+/// submits the same claim form a chooser card always posts.
 fn fields() -> Markup {
     html! {
-        div class="link-fields" {
-            label {
-                "Code on the other sticker"
-                input name="config.code" required autocapitalize="characters"
-                    autocomplete="off" spellcheck="false" placeholder="ABCD 1234 EF";
+        noscript {
+            p class="hint" {
+                "Linking one sticker to another needs JavaScript and a camera. Open this
+                 page in a browser that can use one."
             }
-            label {
-                "Secret under it"
-                input name="config.secret" required autocapitalize="characters"
-                    autocomplete="off" spellcheck="false";
+        }
+        div class="link-scan" x-data="linkScan" x-cloak {
+            button type="button" class="scan-start" x-show="showStart"
+                x-bind:disabled="starting" x-on:click="start" {
+                "Scan the other sticker"
+            }
+            p class="scan-status" x-show="starting" { "Asking for the camera…" }
+            div class="viewfinder" x-show="showCamera" x-cloak {
+                video x-ref="video" playsinline muted autoplay aria-label="Camera preview" {}
+                div class="viewfinder-frame" aria-hidden="true" {}
+            }
+            p class="scan-status" x-show="showCamera" {
+                "Point the camera at the QR code on the other sticker."
+            }
+            div class="scan-actions" x-show="showCamera" x-cloak {
+                button type="button" class="scan-again" x-on:click="reset" {
+                    "Stop camera"
+                }
+            }
+            p class="error" role="alert" x-show="hasError" x-text="error" {}
+            div class="scan-result" x-show="showResult" x-cloak aria-live="polite" {
+                p class="scan-found" {
+                    "Found sticker "
+                    span class="code-id" x-text="codeDisplay" {}
+                }
+                p class="hint" { "It opens the same thing as this one." }
+                div class="scan-actions" {
+                    button type="submit" class="card-claim" { "Use this sticker" }
+                    button type="button" class="scan-again" x-on:click="reset" {
+                        "Scan another"
+                    }
+                }
+                input type="hidden" name="config.code" x-bind:value="code";
+                input type="hidden" name="config.secret" x-bind:value="secret";
             }
         }
     }
