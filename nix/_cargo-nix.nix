@@ -43,21 +43,29 @@ let
   # authority on this already.
   members = builtins.attrNames (builtins.readDir ../crates);
 
+  manifest = lib.importTOML ../Cargo.toml;
+
   # crate2nix does not emit rust-version, so CARGO_PKG_RUST_VERSION would come through
   # empty and clippy would lose the floor it suppresses suggestions against. Without it a
   # lint that cargo clippy holds back, because the API it suggests postdates the declared
   # minimum, fires here instead and the two disagree about the same source.
-  msrv = (lib.importTOML ../Cargo.toml).workspace.package.rust-version;
+  msrv = manifest.workspace.package.rust-version;
+
+  # `[lints] workspace = true` in a member manifest is resolved by cargo, not by crate2nix,
+  # and crate2nix emits no lints at all. Nothing carries the table down to rustc unless it
+  # is read here, so a check without this one is blind to exactly the rules the workspace
+  # cared enough to write down.
+  lints = manifest.workspace.lints or { };
 in
 {
   lint ? false,
 }:
-# `allFeatures` is bolted on beside crate2nix.s own attributes rather than wrapped around
+# `allFeatures` is bolted on beside crate2nix's own attributes rather than wrapped around
 # them, so callers reach `workspaceMembers` exactly as the generated file offers it.
 #
-# It is here because crate2nix resolves a workspace member.s features from its manifest
+# It is here because crate2nix resolves a workspace member's features from its manifest
 # and nothing else, while the suite these checks replace ran under `--all-features`. The
-# difference is silent: qr-core.s tests/store.rs is `#![cfg(feature = "testing")]` all the
+# difference is silent: qr-core's tests/store.rs is `#![cfg(feature = "testing")]` all the
 # way down, and nothing else asks for that feature, so without this the file compiles to a
 # test binary that reports zero tests and passes.
 import ../Cargo.nix {
@@ -89,6 +97,7 @@ import ../Cargo.nix {
         # leave a check that passes because it looked at nothing.
         capLints = "forbid";
         rust-version = msrv;
+        inherit lints;
         # Uncapping only lets the warnings through; this is what makes them fail.
         extraRustcOpts = (crate.extraRustcOpts or [ ]) ++ [
           "-D"
