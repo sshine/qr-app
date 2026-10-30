@@ -128,10 +128,10 @@ async fn every_shipped_preset_renders_a_calibration_sheet() {
 #[ignore = "needs typst"]
 async fn a_layout_the_stock_cannot_hold_is_refused_before_typst_is_reached() {
     let mut request = request("relief-kopi-48", 1);
-    request.layout.qr_mm = 40.0;
+    request.layout.label_w_mm = 12.0;
     let err = renderer()
         .render(&request)
         .await
         .expect_err("should be refused");
-    assert!(err.to_string().contains("quiet zone"), "wrong error: {err}");
+    assert!(err.to_string().contains("host"), "wrong error: {err}");
 }

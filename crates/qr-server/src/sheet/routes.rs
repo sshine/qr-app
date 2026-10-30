@@ -236,9 +236,8 @@ fn sheet_response(error: &sheet::Error) -> Response {
     match error {
         sheet::Error::Sheet(
             e @ (E::UnknownPreset(_)
-            | E::SymbolTooLarge { .. }
-            | E::CaptionTooWide { .. }
-            | E::CaptionTooTall { .. }
+            | E::HostTooWide { .. }
+            | E::SymbolTooSmall { .. }
             | E::OffPage { .. }),
         ) => refused(format!("{e}\n")),
         sheet::Error::Core(e) if e.is_invalid() => refused(format!("{e}\n")),

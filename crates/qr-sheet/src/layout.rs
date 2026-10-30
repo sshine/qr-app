@@ -54,7 +54,8 @@ pub struct Layout {
     /// giving the same away vertically would squeeze out the symbol.
     pub inset_x_mm: f32,
     pub inset_y_mm: f32,
-    /// The symbol alone. The quiet zone is added around it.
+    /// The largest symbol the stock may carry. The renderer uses the largest that fits
+    /// the left half of the label beside the printed host.
     pub qr_mm: f32,
     /// Empty modules on each side of the symbol.
     ///
@@ -63,9 +64,7 @@ pub struct Layout {
     /// phone camera finds a symbol with two.
     #[serde(default = "standard_quiet_modules")]
     pub quiet_modules: u8,
-    pub label_lines: u8,
     pub cut_guides: bool,
-    pub print_secret: bool,
     /// Still renders, but no longer offered.
     ///
     /// Every figure in these presets but one came off a manufacturer's datasheet rather
@@ -77,86 +76,58 @@ pub struct Layout {
     pub deprecated: bool,
 }
 
-/// DejaVu Sans Mono's advance width, in ems. The caption is set in it, so this is what
-/// turns a character count into a width without rendering anything.
+/// DejaVu Sans Mono's advance width, in ems. The host is set in it, so this is what turns
+/// a character count into a width without rendering anything.
 const MONO_ADVANCE_EM: f32 = 0.6022;
 
 /// A point in millimetres.
 const PT_MM: f32 = 25.4 / 72.0;
 
-/// Below this the address stops being readable at arm's length, so a layout that would
-/// need smaller type is refused rather than printed.
-const MIN_URL_PT: f32 = 5.0;
+/// Below this the host stops being readable at arm's length, so a layout that would need
+/// smaller type is refused rather than printed.
+const MIN_HOST_PT: f32 = 5.0;
 
-/// Above this the address competes with the symbol for attention, and on the big stock
-/// it would take the whole box before the grid had any of it.
-const MAX_URL_PT: f32 = 9.0;
+/// Above this the host competes with the symbol for attention.
+const MAX_HOST_PT: f32 = 10.0;
 
-const MIN_CELL_PT: f32 = 5.0;
-const MAX_CELL_PT: f32 = 16.0;
+/// Clearance between the host and the edges of its half-label.
+const HOST_PAD_MM: f32 = 0.7;
 
-/// The gutter between the symbol and the box beside it.
-pub const CAPTION_GUTTER_MM: f32 = 1.5;
-
-/// Clearance between the box's border and the address inside it.
-pub const BOX_PAD_MM: f32 = 0.7;
-
-/// How many characters a row of the typed grid holds.
-///
-/// Both are offered because the box is as wide as the stock leaves it: on a 63.5mm label
-/// four across gives a cell about as tall as it is wide, and on a 99.1mm one it gives
-/// four cells 15mm across holding a 6pt character.
-const GRID_COLS: [usize; 2] = [4, 8];
+/// The white space between the host and the symbol beneath it.
+pub const HOST_GAP_MM: f32 = 1.0;
 
 /// A line of type occupies more than its point size: DejaVu's ascender and descender
-/// together are a little over 1.1em and typst adds leading between lines. Rounded up
-/// rather than derived, because the address is centred in the row it is given and only
-/// an estimate that comes out too small can clip.
-const LINE_EM: f32 = 1.45;
+/// together are a little over 1.1em and typst adds leading. Rounded up rather than
+/// derived, because being a little too small only shifts the symbol down.
+const HOST_LINE_EM: f32 = 1.25;
 
-/// A cell holds one character, which needs its cap height and a little air.
-const CELL_EM: f32 = 1.3;
+/// A symbol smaller than this is not worth putting on stock; the smallest shipped
+/// preset still clears it.
+const MIN_QR_BOX_MM: f32 = 15.0;
 
-/// How much of a cell's width one character may take before the grid reads as cramped.
-const CELL_FILL: f32 = 0.72;
-
-/// What is going into the box, in the terms the arithmetic needs it.
-///
-/// Lengths rather than the strings themselves: the id length is configurable and the
-/// secret length with it, so none of the figures below can be assumed from the defaults.
+/// Half the label's usable area, with the host above the symbol. Worked out once so the
+/// fit check and the renderer cannot disagree about how much room is left.
 #[derive(Debug, Clone, Copy)]
-pub struct CaptionSpec {
-    /// How many lines the address is printed on.
-    pub url_lines: usize,
-    /// The longest of those lines, in characters.
-    pub longest_run: usize,
-    /// Characters in the secret, or zero when this stock does not print one.
-    pub secret_len: usize,
-}
-
-/// The box beside the symbol, in millimetres and points.
-#[derive(Debug, Clone, Copy)]
-pub struct Caption {
-    pub box_w_mm: f32,
-    pub box_h_mm: f32,
-    pub url_pt: f32,
-    /// What the address would have been set at unclamped, which is what says whether the
-    /// box is too narrow rather than merely narrow.
-    pub url_fit: f32,
-    pub header_h_mm: f32,
-    pub cols: usize,
-    pub secret_rows: usize,
-    /// Blank rows under the grid, from the stock's `label_lines`, to write on.
-    pub blank_rows: usize,
-    pub row_h_mm: f32,
-    pub cell_pt: f32,
+pub struct Label {
+    pub content_w_mm: f32,
+    pub content_h_mm: f32,
+    /// The left half, which holds the host and the symbol. The right half is blank.
+    pub half_w_mm: f32,
+    /// What the host would be set at unclamped, which is what says the half is too narrow
+    /// rather than merely narrow.
+    pub host_fit_pt: f32,
+    pub host_pt: f32,
+    pub host_h_mm: f32,
+    pub gap_mm: f32,
+    /// The symbol and its quiet zone, scaled down to fit the half-label.
+    pub qr_box_mm: f32,
 }
 
 /// Width of `chars` monospaced characters at `pt`.
 fn mono_width_mm(chars: usize, pt: f32) -> f32 {
     #[expect(
         clippy::cast_precision_loss,
-        reason = "a caption is a few dozen characters at most"
+        reason = "a host is a few dozen characters at most"
     )]
     let chars = chars as f32;
     chars * MONO_ADVANCE_EM * pt * PT_MM
@@ -180,7 +151,8 @@ impl Layout {
         }
     }
 
-    /// The width the rendered SVG occupies, symbol plus quiet zone.
+    /// The width the rendered SVG occupies, symbol plus quiet zone, before any scaling
+    /// to fit the half-label.
     pub fn qr_box_mm(&self, modules: usize) -> f32 {
         #[expect(
             clippy::cast_precision_loss,
@@ -199,159 +171,74 @@ impl Layout {
         self.qr_mm / modules
     }
 
-    /// What is left of the label once the inset and the symbol have taken their share.
-    pub fn box_w_mm(&self, modules: usize) -> f32 {
-        self.label_w_mm - 2.0 * self.inset_x_mm - self.qr_box_mm(modules) - CAPTION_GUTTER_MM
+    pub fn content_w_mm(&self) -> f32 {
+        self.label_w_mm - 2.0 * self.inset_x_mm
     }
 
-    /// The box is drawn the height of the symbol rather than of the label.
-    ///
-    /// That is the whole point of it: the symbol is centred inside its quiet zone and the
-    /// box is centred against the symbol, so the two borders land on the symbol's own top
-    /// and bottom edges and the label's height is left to the symbol alone.
-    pub fn box_h_mm(&self) -> f32 {
-        self.qr_mm
-    }
-
-    pub fn caption_h_mm(&self) -> f32 {
+    pub fn content_h_mm(&self) -> f32 {
         self.label_h_mm - 2.0 * self.inset_y_mm
     }
 
-    /// Everything the box comes out as, worked out once.
+    /// The left half of the label, worked out from the stock and the host it has to print.
     ///
-    /// Both the fit check and the renderer read it from here, because the two disagreeing
-    /// is a sheet that validates and then prints a grid with its last row off the bottom.
-    pub fn caption(&self, modules: usize, spec: &CaptionSpec) -> Caption {
-        let box_w_mm = self.box_w_mm(modules);
-        let box_h_mm = self.box_h_mm();
+    /// The host is set as large as the half-label allows, and the symbol is then given the
+    /// largest box that still fits under it. Capping rather than refusing is deliberate:
+    /// the preset's `qr_mm` is the size the stock was chosen for, and a host line makes
+    /// that a little smaller on every stock rather than a reason to stop printing.
+    pub fn label(&self, modules: usize, host_chars: usize) -> Label {
+        let content_w_mm = self.content_w_mm();
+        let content_h_mm = self.content_h_mm();
+        let half_w_mm = content_w_mm / 2.0;
 
-        // Fitted to the longest run the address breaks into, not to the whole URL: the
-        // runs are what is printed, one to a line.
-        let unit = mono_width_mm(spec.longest_run.max(1), 1.0);
-        let url_fit = (box_w_mm - 2.0 * BOX_PAD_MM).max(0.0) / unit;
-        let url_pt = url_fit.clamp(MIN_URL_PT, MAX_URL_PT);
+        let unit = mono_width_mm(host_chars.max(1), 1.0);
+        let host_fit = (half_w_mm - 2.0 * HOST_PAD_MM).max(0.0) / unit;
+        let host_pt = host_fit.clamp(MIN_HOST_PT, MAX_HOST_PT);
+        let host_h_mm = host_pt * HOST_LINE_EM * PT_MM;
 
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "an address breaks into a handful of runs"
-        )]
-        let url_lines = spec.url_lines.max(1) as f32;
-        let header_h_mm = url_lines * url_pt * LINE_EM * PT_MM + 2.0 * BOX_PAD_MM;
+        let available_h_mm = (content_h_mm - host_h_mm - HOST_GAP_MM).max(0.0);
+        let qr_box_mm = self.qr_box_mm(modules).min(half_w_mm).min(available_h_mm);
 
-        let blank_rows = usize::from(self.label_lines);
-        let (cols, secret_rows) =
-            self.grid_shape(box_w_mm, box_h_mm - header_h_mm, spec, blank_rows);
-
-        #[expect(clippy::cast_precision_loss, reason = "a grid is a handful of rows")]
-        let total_rows = (secret_rows + blank_rows) as f32;
-        let (row_h_mm, cell_pt) = if total_rows == 0.0 {
-            (0.0, MIN_CELL_PT)
-        } else {
-            let row_h_mm = (box_h_mm - header_h_mm) / total_rows;
-            #[expect(clippy::cast_precision_loss, reason = "four or eight")]
-            let cell_w_mm = box_w_mm / cols as f32;
-            let by_height = row_h_mm / (CELL_EM * PT_MM);
-            let by_width = cell_w_mm * CELL_FILL / (MONO_ADVANCE_EM * PT_MM);
-            (
-                row_h_mm,
-                by_height.min(by_width).clamp(MIN_CELL_PT, MAX_CELL_PT),
-            )
-        };
-
-        Caption {
-            box_w_mm,
-            box_h_mm,
-            url_pt,
-            url_fit,
-            header_h_mm,
-            cols,
-            secret_rows,
-            blank_rows,
-            row_h_mm,
-            cell_pt,
+        Label {
+            content_w_mm,
+            content_h_mm,
+            half_w_mm,
+            host_fit_pt: host_fit,
+            host_pt,
+            host_h_mm,
+            gap_mm: HOST_GAP_MM,
+            qr_box_mm,
         }
     }
 
-    /// How many characters to put on a row, and how many rows that makes.
-    ///
-    /// Whichever of the two widths leaves a cell closest to square. The box is as wide as
-    /// the stock leaves it rather than as wide as the grid wants, so a single figure that
-    /// suits one preset leaves another with cells five times wider than they are tall.
-    fn grid_shape(
-        &self,
-        box_w_mm: f32,
-        avail_h_mm: f32,
-        spec: &CaptionSpec,
-        blank_rows: usize,
-    ) -> (usize, usize) {
-        if spec.secret_len == 0 {
-            return (GRID_COLS[0], 0);
-        }
-        let mut best = (
-            GRID_COLS[0],
-            spec.secret_len.div_ceil(GRID_COLS[0]),
-            f32::MAX,
-        );
-        for cols in GRID_COLS {
-            let rows = spec.secret_len.div_ceil(cols);
-            #[expect(clippy::cast_precision_loss, reason = "a grid is a handful of rows")]
-            let total = (rows + blank_rows) as f32;
-            #[expect(clippy::cast_precision_loss, reason = "four or eight")]
-            let cell_w = box_w_mm / cols as f32;
-            if total <= 0.0 || avail_h_mm <= 0.0 {
-                continue;
-            }
-            // Distance from square, measured in ratio rather than in millimetres so that
-            // being twice too wide and twice too tall count the same.
-            let aspect = (cell_w / (avail_h_mm / total))
-                .max(f32::MIN_POSITIVE)
-                .ln()
-                .abs();
-            if aspect < best.2 {
-                best = (cols, rows, aspect);
-            }
-        }
-        (best.0, best.1)
+    /// Whether this stock can hold the host and a scannable symbol in its left half.
+    pub fn fits(&self, host_chars: usize, modules: usize) -> bool {
+        let label = self.label(modules, host_chars);
+        label.half_w_mm > 0.0
+            && label.host_fit_pt >= MIN_HOST_PT
+            && label.qr_box_mm >= MIN_QR_BOX_MM
+            && label.host_h_mm + label.gap_mm + label.qr_box_mm <= label.content_h_mm + 0.001
     }
 
-    /// Refuses a layout that would print off the page, crowd the quiet zone out of a
-    /// label, or clip the caption. All three produce a sheet that looks plausible on
-    /// screen and wastes a sheet of stock.
-    pub fn validate(&self, name: &str, modules: usize, spec: &CaptionSpec) -> Result<()> {
-        let box_mm = self.qr_box_mm(modules);
-        let quiet_mm = (box_mm - self.qr_mm) / 2.0;
+    /// Refuses a layout that would print off the page, or that leaves the left half too
+    /// small for the host and a scannable symbol. Both produce a sheet that looks
+    /// plausible on screen and wastes a sheet of stock.
+    pub fn validate(&self, name: &str, modules: usize, host_chars: usize) -> Result<()> {
+        let label = self.label(modules, host_chars);
 
-        if box_mm > self.caption_h_mm() {
-            return Err(Error::SymbolTooLarge {
+        if label.half_w_mm <= 0.0 || label.host_fit_pt < MIN_HOST_PT {
+            return Err(Error::HostTooWide {
                 preset: name.to_owned(),
-                qr_mm: self.qr_mm,
-                quiet_mm,
-                label_h_mm: self.label_h_mm,
+                half_w_mm: label.half_w_mm,
+                needed_pt: MIN_HOST_PT,
             });
         }
 
-        let caption = self.caption(modules, spec);
-
-        if caption.box_w_mm <= 0.0 || caption.url_fit < MIN_URL_PT {
-            return Err(Error::CaptionTooWide {
+        if label.qr_box_mm < MIN_QR_BOX_MM {
+            return Err(Error::SymbolTooSmall {
                 preset: name.to_owned(),
-                caption_w_mm: caption.box_w_mm,
-                needed_pt: MIN_URL_PT,
-            });
-        }
-
-        // The header is given what it needs and the rows divide what is left, so this
-        // fires when the address alone has taken the box, or when the rows it has to
-        // share the remainder with have shrunk the characters past reading.
-        let rows = caption.secret_rows + caption.blank_rows;
-        if caption.header_h_mm > caption.box_h_mm
-            || (rows > 0
-                && caption.cell_pt <= MIN_CELL_PT
-                && caption.row_h_mm < MIN_CELL_PT * CELL_EM * PT_MM)
-        {
-            return Err(Error::CaptionTooTall {
-                preset: name.to_owned(),
-                caption_h_mm: caption.box_h_mm,
+                qr_box_mm: label.qr_box_mm,
+                half_w_mm: label.half_w_mm,
+                content_h_mm: label.content_h_mm,
             });
         }
 
@@ -461,24 +348,11 @@ mod tests {
     /// What a default-length redeem URL encodes to; pinned by crate::qr.
     const MODULES: usize = 33;
 
-    /// The longest run the address breaks into: "qr.shine.town/c/", which beats the
-    /// ten-character id on the line under it.
-    const LONGEST: usize = 16;
-
-    /// The default secret length, which is what fills the grid.
-    const SECRET_LEN: usize = 16;
+    /// The host the default base URL prints: "qr.shine.town".
+    const HOST_CHARS: usize = 12;
 
     fn presets() -> Presets {
         Presets::builtin().expect("builtin presets parse")
-    }
-
-    /// What the shipped defaults put in the box.
-    fn spec(layout: &Layout) -> CaptionSpec {
-        CaptionSpec {
-            url_lines: 2,
-            longest_run: LONGEST,
-            secret_len: if layout.print_secret { SECRET_LEN } else { 0 },
-        }
     }
 
     #[test]
@@ -487,62 +361,80 @@ mod tests {
         assert!(presets.names().count() >= 8);
         for (name, layout) in presets.iter() {
             layout
-                .validate(name, MODULES, &spec(layout))
+                .validate(name, MODULES, HOST_CHARS)
                 .unwrap_or_else(|e| panic!("preset {name} does not fit: {e}"));
         }
     }
 
-    /// The property the box exists for: its border meets the symbol's edges, so the
-    /// label's height belongs to the symbol and the box takes none of it.
+    /// The host and the symbol share one half of the label. The right half is the part
+    /// left for writing, so neither may spill into it.
     #[test]
-    fn the_box_is_drawn_the_height_of_the_symbol() {
+    fn the_host_and_symbol_fill_the_left_half_and_no_more() {
         for (name, layout) in presets().iter() {
-            let caption = layout.caption(MODULES, &spec(layout));
+            let label = layout.label(MODULES, HOST_CHARS);
             assert!(
-                (caption.box_h_mm - layout.qr_mm).abs() < f32::EPSILON,
-                "{name} draws the box {}mm against a {}mm symbol",
-                caption.box_h_mm,
-                layout.qr_mm
+                label.qr_box_mm <= label.half_w_mm + 0.001,
+                "{name} draws a {}mm symbol in a {}mm half",
+                label.qr_box_mm,
+                label.half_w_mm
+            );
+            assert!(
+                label.host_h_mm + label.gap_mm + label.qr_box_mm <= label.content_h_mm + 0.001,
+                "{name} stacks more than the {}mm label holds",
+                label.content_h_mm
+            );
+            assert!(
+                (label.half_w_mm * 2.0 - label.content_w_mm).abs() < 0.001,
+                "{name} does not split the content width in two"
             );
         }
     }
 
-    /// Rows divide what the address leaves, so this is what says the grid is drawn
-    /// inside the border rather than through it.
+    /// Above the symbol means above it: the host has a height of its own and the symbol
+    /// starts under the gap, not beside the text.
     #[test]
-    fn the_rows_fill_the_box_and_no_more() {
+    fn the_host_has_a_line_of_its_own_above_the_symbol() {
         for (name, layout) in presets().iter() {
-            let caption = layout.caption(MODULES, &spec(layout));
-            #[expect(clippy::cast_precision_loss, reason = "a grid is a handful of rows")]
-            let rows = (caption.secret_rows + caption.blank_rows) as f32;
-            let total = caption.header_h_mm + rows * caption.row_h_mm;
+            let label = layout.label(MODULES, HOST_CHARS);
+            assert!(label.host_h_mm > 0.0, "{name} gives the host no height");
+            assert!(label.gap_mm > 0.0, "{name} leaves no gap under the host");
+        }
+    }
+
+    #[test]
+    fn no_shipped_preset_sets_the_host_below_the_legible_floor() {
+        for (name, layout) in presets().iter() {
+            let label = layout.label(MODULES, HOST_CHARS);
             assert!(
-                total <= caption.box_h_mm + 0.01,
-                "{name} fills {total}mm of a {}mm box",
-                caption.box_h_mm
+                label.host_pt >= MIN_HOST_PT && label.host_pt <= MAX_HOST_PT,
+                "{name} would set the host at {}pt",
+                label.host_pt
             );
         }
     }
 
-    /// Four across on narrow stock, eight on wide: a fixed figure leaves one preset with
-    /// cells five times wider than they are tall.
+    /// The symbol is capped by the half-label rather than by the preset's qr_mm alone,
+    /// and no preset is allowed to keep a symbol that would reach the blank half.
     #[test]
-    fn the_grid_is_as_wide_as_keeps_its_cells_nearest_square() {
-        let presets = presets();
-        let narrow = presets.get("relief-t7160").expect("t7160");
-        assert_eq!(narrow.caption(MODULES, &spec(narrow)).cols, 4);
+    fn the_symbol_is_capped_by_its_half_and_its_height() {
+        for (name, layout) in presets().iter() {
+            let label = layout.label(MODULES, HOST_CHARS);
+            let available = (label.content_h_mm - label.host_h_mm - label.gap_mm).max(0.0);
+            let expected = layout
+                .qr_box_mm(MODULES)
+                .min(label.half_w_mm)
+                .min(available);
+            assert!(
+                (label.qr_box_mm - expected).abs() < 0.001,
+                "{name} did not take the smallest of symbol, half-width and height"
+            );
+        }
 
-        let wide = presets.get("relief-t7163").expect("t7163");
-        assert_eq!(wide.caption(MODULES, &spec(wide)).cols, 8);
-    }
-
-    #[test]
-    fn stock_that_prints_no_secret_gets_no_grid() {
-        let presets = presets();
-        let small = presets.get("relief-kopi-48").expect("kopi-48");
-        let caption = small.caption(MODULES, &spec(small));
-        assert_eq!(caption.secret_rows, 0);
-        assert_eq!(caption.blank_rows, 0);
+        let narrow = presets().get("relief-kopi-63").expect("kopi-63").clone();
+        assert!(
+            narrow.label(MODULES, HOST_CHARS).qr_box_mm < narrow.qr_box_mm(MODULES),
+            "a symbol wider than the half-label was not scaled down"
+        );
     }
 
     #[test]
@@ -565,7 +457,7 @@ mod tests {
         let stock = presets.get("relief-kopi-63").expect("kopi-63");
         let shifted = stock.offset_by(0.0, 20.0);
         let err = shifted
-            .validate("relief-kopi-63", MODULES, &spec(&shifted))
+            .validate("relief-kopi-63", MODULES, HOST_CHARS)
             .expect_err("should be refused");
         assert!(err.to_string().contains("bottom"), "wrong error: {err}");
     }
@@ -591,7 +483,7 @@ mod tests {
             .get("relief-t7160")
             .expect("t7160 is still reachable");
         assert!(old.deprecated);
-        old.validate("relief-t7160", MODULES, &spec(old))
+        old.validate("relief-t7160", MODULES, HOST_CHARS)
             .expect("a deprecated preset still has to fit its stock");
     }
 
@@ -624,77 +516,25 @@ mod tests {
     }
 
     #[test]
-    fn no_shipped_preset_sets_type_below_the_legible_floor() {
-        for (name, layout) in presets().iter() {
-            let caption = layout.caption(MODULES, &spec(layout));
-            assert!(
-                caption.url_pt >= MIN_URL_PT && caption.url_pt <= MAX_URL_PT,
-                "{name} would set the address at {}pt",
-                caption.url_pt
-            );
-            assert!(
-                caption.cell_pt >= MIN_CELL_PT,
-                "{name} would set the grid at {}pt",
-                caption.cell_pt
-            );
-        }
-    }
-
-    #[test]
-    fn a_symbol_too_tall_for_its_label_is_refused() {
+    fn a_host_too_long_for_its_half_is_refused() {
         let presets = presets();
-        let mut layout = presets.get("relief-kopi-48").expect("preset").clone();
-        layout.qr_mm = 30.0;
-        assert!(
-            layout
-                .validate("overgrown", MODULES, &spec(&layout))
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn a_symbol_that_leaves_no_room_for_the_caption_is_refused() {
-        // Portrait stock, which none of the shipped presets is: on a label wider than it
-        // is tall the height runs out first, so this check only ever fires on stock
-        // someone adds later.
-        let layout = Layout {
-            description: "portrait".to_owned(),
-            cols: 1,
-            rows: 1,
-            margin_left_mm: 10.0,
-            margin_top_mm: 10.0,
-            pitch_x_mm: 40.0,
-            pitch_y_mm: 80.0,
-            label_w_mm: 40.0,
-            label_h_mm: 80.0,
-            inset_x_mm: 2.0,
-            inset_y_mm: 2.0,
-            qr_mm: 25.0,
-            quiet_modules: QUIET_MODULES,
-            label_lines: 0,
-            cut_guides: false,
-            print_secret: false,
-            deprecated: false,
-        };
+        let mut layout = presets.get("relief-kopi-63").expect("preset").clone();
+        layout.label_w_mm = 20.0;
         let err = layout
-            .validate("portrait", MODULES, &spec(&layout))
+            .validate("narrow", MODULES, HOST_CHARS)
             .expect_err("should be refused");
-        assert!(
-            err.to_string().contains("beside the symbol"),
-            "wrong error: {err}"
-        );
+        assert!(err.to_string().contains("host"), "wrong error: {err}");
     }
 
     #[test]
-    fn more_writing_lines_than_the_label_holds_are_refused() {
+    fn a_symbol_with_no_room_left_for_the_host_is_refused() {
         let presets = presets();
-        let mut layout = presets.get("relief-t7160").expect("preset").clone();
-        layout.label_lines = 12;
-        assert!(
-            layout
-                .validate("overfull", MODULES, &spec(&layout))
-                .is_err()
-        );
+        let mut layout = presets.get("relief-kopi-63").expect("preset").clone();
+        layout.qr_mm = 1.0;
+        let err = layout
+            .validate("tiny", MODULES, HOST_CHARS)
+            .expect_err("should be refused");
+        assert!(err.to_string().contains("symbol"), "wrong error: {err}");
     }
 
     #[test]
@@ -702,22 +542,18 @@ mod tests {
         let presets = presets();
         let mut layout = presets.get("plain").expect("preset").clone();
         layout.cols = 9;
-        assert!(
-            layout
-                .validate("overwide", MODULES, &spec(&layout))
-                .is_err()
-        );
+        assert!(layout.validate("overwide", MODULES, HOST_CHARS).is_err());
     }
 
     #[test]
     fn content_inside_a_printers_unprintable_edge_is_refused() {
         // Stock that runs to the page edge is the case this exists for: the labels are
-        // fine, but a printer will not put toner on the outer column's caption.
+        // fine, but a printer will not put toner on the outer column.
         let presets = presets();
         let mut layout = presets.get("relief-kopi-70").expect("preset").clone();
         layout.inset_x_mm = 0.5;
         let err = layout
-            .validate("flush", MODULES, &spec(&layout))
+            .validate("flush", MODULES, HOST_CHARS)
             .expect_err("should be refused");
         assert!(err.to_string().contains("toner"), "wrong error: {err}");
     }

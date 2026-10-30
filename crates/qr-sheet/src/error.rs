@@ -14,31 +14,25 @@ pub enum Error {
     PresetSyntax(#[source] toml::de::Error),
 
     #[error(
-        "preset {preset} puts a {qr_mm}mm symbol plus its {quiet_mm}mm quiet zone into a \
-         label {label_h_mm}mm tall; shrink qr_mm or pick larger stock"
+        "preset {preset} gives the host only {half_w_mm:.1}mm, which cannot hold it at \
+         {needed_pt}pt; shrink the host, use narrower stock or pick wider stock"
     )]
-    SymbolTooLarge {
+    HostTooWide {
         preset: String,
-        qr_mm: f32,
-        quiet_mm: f32,
-        label_h_mm: f32,
-    },
-
-    #[error(
-        "preset {preset} leaves {caption_w_mm:.1}mm beside the symbol, which cannot hold \
-         the printed address at {needed_pt}pt; shrink qr_mm or pick wider stock"
-    )]
-    CaptionTooWide {
-        preset: String,
-        caption_w_mm: f32,
+        half_w_mm: f32,
         needed_pt: f32,
     },
 
     #[error(
-        "preset {preset} asks for more than the {caption_h_mm:.1}mm box beside the symbol \
-         holds; reduce label_lines or turn print_secret off"
+        "preset {preset} leaves a {half_w_mm:.1}mm half-label ({content_h_mm:.1}mm tall) \
+         with only {qr_box_mm:.1}mm for the symbol; shrink qr_mm or pick larger stock"
     )]
-    CaptionTooTall { preset: String, caption_h_mm: f32 },
+    SymbolTooSmall {
+        preset: String,
+        qr_box_mm: f32,
+        half_w_mm: f32,
+        content_h_mm: f32,
+    },
 
     #[error(
         "preset {preset} puts {edge} past what a printer will put toner on at the {side} \

@@ -12,13 +12,10 @@ use qrcode::EcLevel;
 use serde::Serialize;
 use tokio::process::Command;
 
-use crate::{Error, Layout, Result, layout::CaptionSpec, qr};
+use crate::{Error, Layout, Result, qr};
 
 const SHEET_TYPST: &str = include_str!("../typst/sheet.typ");
 const CALIBRATION_TYPST: &str = include_str!("../typst/calibration.typ");
-
-/// How many lines the address is printed on.
-const URL_LINES: usize = 2;
 
 /// A4's height, past which a footer would overprint the last row.
 const PAGE_H_MM: f32 = crate::layout::PAGE_H_MM;
@@ -38,19 +35,13 @@ pub struct SheetRequest {
 struct Document<'a> {
     layout: &'a Layout,
     preset: &'a str,
+    /// The host printed above every symbol, without the scheme.
+    host: String,
+    host_pt: f32,
+    host_gap_mm: f32,
+    /// The left half of the label, which holds the host and the symbol.
+    half_w_mm: f32,
     qr_box_mm: f32,
-    /// The box beside the symbol, drawn the symbol's own height.
-    box_w_mm: f32,
-    box_h_mm: f32,
-    box_pad_mm: f32,
-    /// The row the address sits in, and the height the rows under it share.
-    header_h_mm: f32,
-    row_h_mm: f32,
-    cols: usize,
-    /// Rows left blank under the grid, to write on.
-    blank_rows: usize,
-    url_pt: f32,
-    cell_pt: f32,
     footer: String,
     footer_dy_mm: Option<f32>,
     codes: Vec<Entry>,
@@ -58,35 +49,7 @@ struct Document<'a> {
 
 #[derive(Serialize)]
 struct Entry {
-    id: String,
-    /// The address broken after the path, so the longest run printed is the host and
-    /// the code gets a line to itself.
-    url_lines: Vec<String>,
-    /// The secret, one character to a cell, in reading order.
-    cells: Vec<String>,
     svg: String,
-}
-
-/// The address as it is printed: where to type, then what to type there.
-///
-/// The scheme is left off. Every browser and every phone keyboard puts it back, and the
-/// run it would add is longer than the host, so printing it would set the whole address
-/// smaller on exactly the stock that can least afford it.
-fn url_lines(base: &BaseUrl, id: &CodeId) -> Vec<String> {
-    vec![format!("{}/c/", typed_host(base)), id.to_string()]
-}
-
-/// The secret split into the cells it is printed in, padded to fill its last row.
-///
-/// Ungrouped: a cell is the grouping. The spaces a printed secret carries exist to keep
-/// a reader's place in a run of sixteen characters, and a grid of boxes does that better
-/// than a space does.
-fn cells(secret: &Secret, cols: usize) -> Vec<String> {
-    let mut cells: Vec<String> = secret.expose().chars().map(|c| c.to_string()).collect();
-    while cells.len() % cols != 0 {
-        cells.push(String::new());
-    }
-    cells
 }
 
 pub struct SheetRenderer {
@@ -130,72 +93,32 @@ impl SheetRenderer {
             version = symbol.version;
 
             // The SVG is the only place the plaintext secret lands on disk, and it is
-            // already a bitmap by then: codes.json below carries the printed characters,
-            // never the URL that joins them.
+            // already a bitmap by then: nothing printed beside the symbol carries the id,
+            // the secret or the URL that joins them.
             let svg_path = qr_dir.join(format!("{id}.svg"));
             write(&svg_path, symbol.svg.as_bytes())?;
 
             entries.push(Entry {
-                id: id.to_string(),
-                url_lines: url_lines(&request.base, id),
-                cells: Vec::new(),
                 svg: format!("qr/{id}.svg"),
             });
         }
 
-        // Measured off what was actually generated rather than assumed from the default
-        // lengths, because both the id length and the secret length are configurable and
-        // the box is fitted to them.
-        let longest_run = entries
-            .iter()
-            .flat_map(|e| e.url_lines.iter().map(|l| l.chars().count()))
-            .max()
-            .unwrap_or(1);
-        let secret_len = if request.layout.print_secret {
-            request
-                .codes
-                .first()
-                .map_or(0, |(_, secret)| secret.expose().chars().count())
-        } else {
-            0
-        };
-        let spec = CaptionSpec {
-            url_lines: URL_LINES,
-            longest_run,
-            secret_len,
-        };
+        let host = typed_host(&request.base);
+        let host_chars = host.chars().count();
 
-        request.layout.validate(&request.preset, modules, &spec)?;
-        let caption = request.layout.caption(modules, &spec);
-
-        if secret_len > 0 {
-            for (entry, (_, secret)) in entries.iter_mut().zip(&request.codes) {
-                entry.cells = cells(secret, caption.cols);
-            }
-        }
-
-        // With nothing under it the address is given the whole box, rather than left
-        // floating above an empty half of one.
-        let rows = caption.secret_rows + caption.blank_rows;
-        let header_h_mm = if rows == 0 {
-            caption.box_h_mm
-        } else {
-            caption.header_h_mm
-        };
+        request
+            .layout
+            .validate(&request.preset, modules, host_chars)?;
+        let label = request.layout.label(modules, host_chars);
 
         let document = Document {
             layout: &request.layout,
             preset: &request.preset,
-            qr_box_mm: request.layout.qr_box_mm(modules),
-            box_w_mm: caption.box_w_mm,
-            box_h_mm: caption.box_h_mm,
-            box_pad_mm: crate::layout::BOX_PAD_MM,
-            header_h_mm,
-            row_h_mm: caption.row_h_mm,
-            cols: caption.cols,
-            blank_rows: caption.blank_rows,
-            url_pt: caption.url_pt,
-            cell_pt: caption.cell_pt,
+            host,
+            host_pt: label.host_pt,
+            host_gap_mm: label.gap_mm,
+            half_w_mm: label.half_w_mm,
+            qr_box_mm: label.qr_box_mm,
             footer: footer(request, version, modules),
             footer_dy_mm: footer_dy_mm(&request.layout),
             codes: entries,
@@ -215,16 +138,11 @@ impl SheetRenderer {
         let document = Document {
             layout,
             preset,
+            host: String::new(),
+            host_pt: 7.0,
+            host_gap_mm: 0.0,
+            half_w_mm: 0.0,
             qr_box_mm: 0.0,
-            box_w_mm: 0.0,
-            box_h_mm: 0.0,
-            box_pad_mm: 0.0,
-            header_h_mm: 0.0,
-            row_h_mm: 0.0,
-            cols: 0,
-            blank_rows: 0,
-            url_pt: 7.0,
-            cell_pt: 7.0,
             footer: String::new(),
             footer_dy_mm: None,
             codes: Vec::new(),
@@ -296,7 +214,7 @@ impl SheetRenderer {
     }
 }
 
-/// The host a person types when the QR will not scan, without the scheme.
+/// The host printed above the symbol, without the scheme.
 ///
 /// Lowercase and bare: it is read by a human rather than encoded, nothing about `https`
 /// helps them, and every character saved is type size kept on a narrow label.
@@ -366,33 +284,11 @@ mod tests {
         assert!(footer_dy_mm(&layout("relief-t7160")).is_some());
     }
 
+    /// The scheme is left off: it is read by a human rather than encoded, and every
+    /// browser puts it back.
     #[test]
-    fn a_secret_is_printed_one_character_to_a_cell() {
-        let secret = Secret::parse("H7TQ4R9WX2ND5PKC").expect("secret");
-        let cells = cells(&secret, 4);
-        assert_eq!(cells.len(), 16);
-        assert_eq!(cells.first().map(String::as_str), Some("H"));
-        assert_eq!(cells.last().map(String::as_str), Some("C"));
-    }
-
-    /// The grid is drawn row by row, so a secret that does not divide by the row width
-    /// would otherwise leave typst a row short of cells.
-    #[test]
-    fn a_secret_that_does_not_fill_its_last_row_is_padded_out() {
-        let secret = Secret::parse("H7TQ4R9WX2ND5P").expect("secret");
-        let cells = cells(&secret, 4);
-        assert_eq!(cells.len(), 16);
-        assert_eq!(cells.last().map(String::as_str), Some(""));
-    }
-
-    /// The scheme is left off, and the break is after the path rather than inside the id.
-    #[test]
-    fn the_address_breaks_after_the_path() {
-        let base = BaseUrl::parse("https://qr.shine.town").expect("base");
-        let id = CodeId::parse("RDTAPG55XY").expect("id");
-        assert_eq!(
-            url_lines(&base, &id),
-            vec!["qr.shine.town/c/", "RDTAPG55XY"]
-        );
+    fn the_printed_host_drops_the_scheme_and_trailing_slash() {
+        let base = BaseUrl::parse("https://qr.shine.town/").expect("base");
+        assert_eq!(typed_host(&base), "qr.shine.town");
     }
 }
