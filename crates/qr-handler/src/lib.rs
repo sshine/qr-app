@@ -41,8 +41,10 @@ pub fn mount(state: AppState) -> Router {
         .route("/c/{code}/api/v1/redeem", post(routes::redeem));
 
     let mut guarded = Router::new()
+        .route("/c/{code}/manage", get(routes::manage))
         .route("/c/{code}/api/v1/state", get(routes::code_state))
         .route("/c/{code}/api/v1/claim", post(routes::claim))
+        .route("/c/{code}/api/v1/recover", post(routes::recover))
         .route("/c/{code}/api/v1/release", post(routes::release));
 
     for handler in state.registry().iter() {

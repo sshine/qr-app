@@ -79,6 +79,56 @@
       },
     }));
 
+    // The bar every issued code carries. Release lives behind a dialog because it is
+    // the one control that changes what a scan does; the dialog says that the photos
+    // and history are kept before the form is submitted.
+    Alpine.data("codeControls", () => ({
+      releaseOpen: false,
+
+      openRelease() {
+        this.releaseOpen = true;
+      },
+
+      closeRelease() {
+        this.releaseOpen = false;
+      },
+    }));
+
+    // A forward code shows where it goes for five seconds, then leaves. Staying cancels
+    // the timer for good; without script the destination and Continue link are all that
+    // is needed, and the countdown block stays hidden by x-cloak.
+    Alpine.data("interstitial", () => ({
+      seconds: 5,
+      message: "",
+      timer: null,
+
+      init() {
+        this.message = this.remaining();
+        this.timer = setInterval(() => this.tick(), 1000);
+      },
+
+      remaining() {
+        return this.seconds === 1
+          ? "Continuing in 1 second."
+          : `Continuing in ${this.seconds} seconds.`;
+      },
+
+      tick() {
+        this.seconds -= 1;
+        if (this.seconds <= 0) {
+          clearInterval(this.timer);
+          if (boot.state?.url) location.assign(boot.state.url);
+          return;
+        }
+        this.message = this.remaining();
+      },
+
+      stay() {
+        clearInterval(this.timer);
+        this.message = "Not redirecting. The destination is above.";
+      },
+    }));
+
     Alpine.data("album", () => ({
       photos: boot.state?.photos ?? [],
       pending: [],

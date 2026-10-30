@@ -278,3 +278,163 @@ input[type="text"],
 .album-foot a {
   color: var(--muted);
 }
+
+/* The bar every issued code carries. Sticky so release and manage stay reachable on a
+ * long album, and translucent so it does not read as a second header. */
+.code-controls {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0.5rem 1rem;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+
+.code-controls .control {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.code-controls .control:hover {
+  border-color: var(--accent);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 45%);
+}
+
+.modal {
+  width: 100%;
+  max-width: 28rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 30%);
+}
+
+.modal h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--gap);
+  margin-top: 1rem;
+}
+
+.modal-actions form {
+  margin: 0;
+}
+
+.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  font-weight: 600;
+}
+
+.noscript-release {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* What a released code used to be. */
+.recover {
+  margin-top: 2rem;
+}
+
+.recover h2 {
+  margin-bottom: 0.25rem;
+  font-size: 1.1rem;
+}
+
+.recover .hint {
+  color: var(--muted);
+}
+
+.recover-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.recover-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.recover-what {
+  display: flex;
+  flex-direction: column;
+}
+
+.recover-what .blurb {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* A forward code's five seconds. */
+.interstitial .destination {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.interstitial .destination a {
+  color: var(--accent);
+}
+
+.countdown {
+  margin-top: 1rem;
+}
+
+.interstitial-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap);
+}
+
+a.continue {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  text-decoration: none;
+}

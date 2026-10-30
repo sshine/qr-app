@@ -354,6 +354,94 @@ pub async fn release_binding<'e, E: PgExecutor<'e>>(ex: E, binding_id: Uuid) -> 
     Ok(())
 }
 
+/// A binding by id, but only if it belongs to this code.
+///
+/// Scoped rather than fetched and compared, so an id from another code's history is
+/// indistinguishable from an id that never existed.
+pub async fn binding<'e, E: PgExecutor<'e>>(
+    ex: E,
+    code_id: &CodeId,
+    binding_id: Uuid,
+) -> Result<Option<Binding>> {
+    let row = sqlx::query!(
+        r#"
+        SELECT id, code_id, handler_id, config, title, created_at, released_at
+        FROM bindings
+        WHERE id = $1 AND code_id = $2
+        "#,
+        binding_id,
+        code_id.as_str(),
+    )
+    .fetch_optional(ex)
+    .await?;
+
+    row.map(|row| {
+        Ok(Binding {
+            id: row.id,
+            code_id: CodeId::parse(&row.code_id)?,
+            handler_id: row.handler_id,
+            config: row.config,
+            title: row.title,
+            created_at: row.created_at,
+            released_at: row.released_at,
+        })
+    })
+    .transpose()
+}
+
+/// Every use of this code, most recently released first.
+///
+/// The rows are kept indefinitely, which is what makes recovery possible; the list is
+/// small because a sticker only changes its mind when a box is emptied and reused.
+pub async fn released_bindings<'e, E: PgExecutor<'e>>(
+    ex: E,
+    code_id: &CodeId,
+) -> Result<Vec<Binding>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, code_id, handler_id, config, title, created_at, released_at
+        FROM bindings
+        WHERE code_id = $1 AND released_at IS NOT NULL
+        ORDER BY released_at DESC
+        "#,
+        code_id.as_str(),
+    )
+    .fetch_all(ex)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(Binding {
+                id: row.id,
+                code_id: CodeId::parse(&row.code_id)?,
+                handler_id: row.handler_id,
+                config: row.config,
+                title: row.title,
+                created_at: row.created_at,
+                released_at: row.released_at,
+            })
+        })
+        .collect()
+}
+
+/// Undoes a release. `false` means the row was not released, or is not there.
+///
+/// The partial unique index is what refuses a recovery that races a claim: both cannot
+/// leave the code with an active binding.
+pub async fn recover_binding<'e, E: PgExecutor<'e>>(ex: E, binding_id: Uuid) -> Result<bool> {
+    let row = sqlx::query!(
+        r#"
+        UPDATE bindings SET released_at = NULL
+        WHERE id = $1 AND released_at IS NOT NULL
+        RETURNING id
+        "#,
+        binding_id,
+    )
+    .fetch_optional(ex)
+    .await?;
+    Ok(row.is_some())
+}
+
 pub async fn set_binding_config<'e, E: PgExecutor<'e>>(
     ex: E,
     binding_id: Uuid,

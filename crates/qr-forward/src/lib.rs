@@ -1,11 +1,12 @@
 //! A code that redirects, and can be repointed later.
 //!
-//! The simpler of the two handlers, and the one that exercises the parts of the trait a
-//! photo album does not: a response that is not markup, and a configuration that matters
-//! before anything has been uploaded.
+//! The simpler of the two original handlers, and the one that exercises the parts of the
+//! trait a photo album does not: a configuration that matters before anything has been
+//! uploaded.
 //!
-//! Scanning a code that points somewhere follows the redirect. Scanning one that points
-//! nowhere yet shows the form that sets a destination, at the same URL.
+//! Scanning a code that points somewhere shows an interstitial with the destination and
+//! a five-second countdown, so the controls every issued code carries have somewhere to
+//! live on a code whose whole job is to leave. The visitor can continue at once or stay.
 
 mod target;
 
@@ -13,7 +14,7 @@ use async_trait::async_trait;
 use axum::{
     Json, Router,
     extract::State,
-    http::{StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -38,12 +39,12 @@ impl Handler for ForwardHandler {
     }
 
     fn name(&self) -> &'static str {
-        "Link"
+        "Website link"
     }
 
     fn chooser(&self) -> ChooserCard {
         ChooserCard {
-            title: "Link",
+            title: "Redirect to a website",
             blurb: "Send whoever scans this somewhere, and change where later.",
             icon: maud::PreEscaped(ICON),
             fields: html! {},
@@ -124,11 +125,11 @@ impl Handler for ForwardHandler {
         binding: &Binding,
     ) -> Result<HandlerPage, HandlerError> {
         let Some(target) = target::current(ctx.store().pool(), binding.id).await? else {
-            return Ok(HandlerPage::Markup(editor(binding)));
+            return Ok(HandlerPage::Markup(editor(binding, None)));
         };
 
-        // Counted before the redirect is sent, because nothing comes back afterwards to
-        // count it. A failure here must not swallow the redirect.
+        // Counted when the destination page is opened, because nothing comes back after
+        // the browser leaves. A visitor who stays still reached the destination page.
         if let Err(error) = store::record_event(
             ctx.store().pool(),
             EventKind::ForwardFollowed,
@@ -141,21 +142,17 @@ impl Handler for ForwardHandler {
             tracing::warn!(%error, "a follow was not counted");
         }
 
-        let status = StatusCode::from_u16(target.status.try_into().unwrap_or(302))
-            .unwrap_or(StatusCode::FOUND);
+        Ok(HandlerPage::Markup(interstitial(binding, &target)))
+    }
 
-        Ok(HandlerPage::Response(
-            (
-                status,
-                [
-                    (header::LOCATION, target.url.clone()),
-                    // The destination can change under the same URL, so nothing may
-                    // remember this one.
-                    (header::CACHE_CONTROL, "no-store".to_owned()),
-                ],
-            )
-                .into_response(),
-        ))
+    /// The destination editor, even once the code redirects.
+    async fn manage(
+        &self,
+        ctx: &HandlerCtx,
+        binding: &Binding,
+    ) -> Result<HandlerPage, HandlerError> {
+        let target = target::current(ctx.store().pool(), binding.id).await?;
+        Ok(HandlerPage::Markup(editor(binding, target.as_ref())))
     }
 
     fn routes(&self) -> Router<AppState> {
@@ -235,14 +232,19 @@ fn error_response(error: &qr_core::Error) -> Response {
 
 /// What a scan lands on while the code still points nowhere.
 ///
-/// Once a destination is set the code redirects instead and this is never rendered
-/// again. `PUT /target`, which the form here calls, is what changes it after that.
-fn editor(binding: &Binding) -> Markup {
+/// Once a destination is set the code shows the interstitial instead and this is only
+/// rendered again at `/manage`, where it is the editor for the destination.
+fn editor(binding: &Binding, target: Option<&ForwardTarget>) -> Markup {
     html! {
         main class="forward editor" x-data="forward" {
-            h1 { "Link" }
+            h1 { "Redirect to a website" }
             p class="code-id" { (binding.code_id.grouped()) }
-            p class="destination empty" { "No destination set." }
+            @match target {
+                Some(target) => p class="destination" {
+                    a href=(target.url) rel="noopener noreferrer" { (target.url) }
+                },
+                None => p class="destination empty" { "No destination set." },
+            }
 
             form x-ref="form" "x-on:submit.prevent"="save" class="target-form" {
                 label {
@@ -256,6 +258,40 @@ fn editor(binding: &Binding) -> Markup {
                 }
                 button type="submit" "x-bind:disabled"="saving" { "Save" }
                 span class="error" x-text="error" x-show="error" {}
+            }
+        }
+    }
+}
+
+/// The five seconds between a scan and the destination.
+///
+/// Shown rather than redirected immediately so the code has a page, and so the top
+/// controls (release, manage) are reachable on a code whose whole job is to leave. The
+/// destination is printed in full; a QR sticker that silently teleports is worse.
+fn interstitial(binding: &Binding, target: &ForwardTarget) -> Markup {
+    html! {
+        main class="forward interstitial" x-data="interstitial" {
+            h1 { "Leaving for another site" }
+            p { "This code points to:" }
+            p class="destination" {
+                a href=(target.url) rel="noopener noreferrer" { (target.url) }
+            }
+
+            div class="countdown" x-cloak {
+                p x-text="message" {}
+                div class="interstitial-actions" {
+                    a class="continue" href=(target.url) { "Continue now" }
+                    button type="button" x-on:click="stay" { "Stay here" }
+                }
+            }
+
+            noscript {
+                p { "Automatic redirects need JavaScript. Use Continue now." }
+                a class="continue" href=(target.url) { "Continue now" }
+            }
+
+            p class="hint" {
+                a href={ "/c/" (binding.code_id) "/manage" } { "Manage this code" }
             }
         }
     }

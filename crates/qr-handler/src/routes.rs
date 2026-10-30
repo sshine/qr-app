@@ -4,14 +4,16 @@ use std::collections::HashMap;
 
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Form, Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use maud::html;
 use qr_core::{Binding, CodeId, Secret, model::EventKind, store};
 use serde::Deserialize;
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::{
     HandlerPage,
@@ -43,6 +45,9 @@ fn handler_response(error: &crate::HandlerError) -> Response {
 }
 
 fn store_response(error: &qr_core::Error) -> Response {
+    if error.is_not_found() {
+        return (StatusCode::NOT_FOUND, "nothing here\n").into_response();
+    }
     if error.is_conflict() {
         return (StatusCode::CONFLICT, "that already happened\n").into_response();
     }
@@ -117,6 +122,148 @@ fn looped(from: &CodeId) -> Response {
         .into_response()
 }
 
+/// The bar every issued code carries.
+///
+/// Release is a soft delete and is offered with the consequence spelled out rather than
+/// as a bare button: the photos and the destination survive, and the next scan offers
+/// them back. Scripted visitors get the dialog; `<noscript>` gets the same form and the
+/// same sentence, because a control that only works with script would be a second-class
+/// way to lose a box.
+fn controls(code: &CodeId, managing: bool) -> maud::Markup {
+    html! {
+        nav class="code-controls" x-data="codeControls" aria-label="This code" {
+            @if managing {
+                a class="control" href={ "/c/" (code) } { "Open" }
+            } @else {
+                a class="control" href={ "/c/" (code) "/manage" } { "Manage" }
+            }
+            button type="button" class="control" x-on:click="openRelease" { "Release…" }
+
+            div class="modal-backdrop" x-show="releaseOpen" x-cloak {
+                div class="modal" role="dialog" aria-modal="true"
+                    aria-labelledby="release-title" {
+                    h2 id="release-title" { "Release this code?" }
+                    p {
+                        "The photos, link or destination stay in the database. Scanning this
+                         sticker again offers them back under Recover QR code."
+                    }
+                    div class="modal-actions" {
+                        button type="button" x-on:click="closeRelease" { "Keep it" }
+                        form method="post" action={ "/c/" (code) "/api/v1/release" } {
+                            button type="submit" class="danger" { "Release QR code" }
+                        }
+                    }
+                }
+            }
+
+            noscript {
+                form class="noscript-release" method="post"
+                    action={ "/c/" (code) "/api/v1/release" } {
+                    span { "Release this code? Its photos and history are kept." }
+                    button type="submit" { "Release QR code" }
+                }
+            }
+        }
+    }
+}
+
+/// `GET /c/{code}/manage` — the code administered rather than used.
+///
+/// A redirecting code sends every scan onwards, so this is where its destination can be
+/// changed, and where release is reachable at all.
+pub async fn manage(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
+    let Some(binding) = access.binding else {
+        return see_other(&format!("/c/{}", access.code.id));
+    };
+
+    let Some(handler) = state.registry().by_name(&binding.handler_id) else {
+        return (StatusCode::NOT_IMPLEMENTED, "unknown handler\n").into_response();
+    };
+
+    let ctx = state.handler_ctx();
+    match handler.manage(&ctx, &binding).await {
+        Err(error) => handler_response(&error),
+        Ok(HandlerPage::Response(response)) => response,
+        Ok(HandlerPage::Markup(body)) => {
+            let described = handler
+                .describe(&ctx, &binding)
+                .await
+                .unwrap_or_else(|_| json!({}));
+            shell::render(
+                Page::new(
+                    binding
+                        .title
+                        .clone()
+                        .unwrap_or_else(|| handler.name().to_owned()),
+                    html! {
+                        (controls(&access.code.id, true))
+                        (body)
+                    },
+                )
+                .with_state(json!({
+                    "code": access.code.id.as_str(),
+                    "handler": binding.handler_id,
+                    "state": described,
+                })),
+            )
+            .into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RecoverBody {
+    pub binding: Uuid,
+}
+
+/// `POST /c/{code}/api/v1/recover` — put a released use back.
+///
+/// The row was never deleted, so this is one UPDATE. What it must not do is let two
+/// active bindings exist: the partial unique index refuses that, and a code that was
+/// claimed in the meantime gets a conflict rather than a silent swap.
+pub async fn recover(
+    CodeCtx(access): CodeCtx,
+    State(state): State<AppState>,
+    Form(body): Form<RecoverBody>,
+) -> Response {
+    let result = async {
+        let mut tx = state.store().begin().await?;
+
+        let Some(binding) = store::binding(&mut *tx, &access.code.id, body.binding).await? else {
+            return Err(qr_core::Error::NotFound("binding"));
+        };
+        if binding.released_at.is_none() {
+            return Err(qr_core::Error::Conflict("binding"));
+        }
+        if store::active_binding(&mut *tx, &access.code.id)
+            .await?
+            .is_some()
+        {
+            return Err(qr_core::Error::Conflict("binding"));
+        }
+        if !store::recover_binding(&mut *tx, binding.id).await? {
+            return Err(qr_core::Error::Conflict("binding"));
+        }
+
+        store::record_event(
+            &mut *tx,
+            EventKind::CodeRecovered,
+            Some(&access.code.id),
+            Some(binding.id),
+            &json!({ "handler": binding.handler_id }),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+
+    match result {
+        Ok(()) => see_other(&format!("/c/{}", access.code.id)),
+        Err(error) => store_response(&error),
+    }
+}
+
 /// `GET /c/{code}` — the page a scan lands on.
 ///
 /// Unguarded on purpose: this is the one route that has to answer before a cookie
@@ -146,7 +293,7 @@ pub async fn landing(
             // hop counter has done its job and does not belong in the address bar.
             return see_other(&format!("/c/{code_id}"));
         }
-        return chooser(&state, &code_id).into_response();
+        return chooser(&state, &code_id).await;
     };
 
     let Some(handler) = state.registry().by_name(&binding.handler_id) else {
@@ -190,7 +337,10 @@ pub async fn landing(
                         .title
                         .clone()
                         .unwrap_or_else(|| handler.name().to_owned()),
-                    body,
+                    html! {
+                        (controls(&code_id, false))
+                        (body)
+                    },
                 )
                 .with_state(json!({
                     "code": code_id.as_str(),
@@ -332,12 +482,34 @@ fn bootstrap(code: &str) -> Response {
 }
 
 /// What an unbound code offers.
-fn chooser(state: &AppState, code: &CodeId) -> impl IntoResponse {
+///
+/// A released code keeps its history, and this is where that history is offered back.
+/// Recovery is not a restore of a deleted thing: the binding row was only marked
+/// released, and the photos, destination and link row behind it never moved.
+async fn chooser(state: &AppState, code: &CodeId) -> Response {
     let cards: Vec<_> = state
         .registry()
         .iter()
         .map(|h| (h.id(), h.chooser()))
         .collect();
+
+    let released = store::released_bindings(state.store().pool(), code)
+        .await
+        .unwrap_or_default();
+    let ctx = state.handler_ctx();
+    let mut history = Vec::new();
+    for binding in released {
+        let Some(handler) = state.registry().by_name(&binding.handler_id) else {
+            // A binding to a handler this build no longer carries. It cannot be
+            // recovered into a page, but it stays in the table.
+            continue;
+        };
+        let summary = handler
+            .describe(&ctx, &binding)
+            .await
+            .unwrap_or_else(|_| json!({}));
+        history.push((binding, handler.name(), summary));
+    }
 
     shell::render(
         Page::new(
@@ -371,6 +543,36 @@ fn chooser(state: &AppState, code: &CodeId) -> impl IntoResponse {
                             }
                         }
                     }
+
+                    @if !history.is_empty() {
+                        section class="recover" {
+                            h2 { "Recover QR code" }
+                            p class="hint" {
+                                "This sticker has been used before. Recovering one of these keeps
+                                 what it held, including its photos."
+                            }
+                            ul class="recover-list" {
+                                @for (binding, name, summary) in &history {
+                                    li {
+                                        div class="recover-what" {
+                                            strong {
+                                                (binding.title.as_deref().unwrap_or(name))
+                                            }
+                                            span class="blurb" {
+                                                (describe_line(name, summary, binding.released_at))
+                                            }
+                                        }
+                                        form method="post"
+                                            action={ "/c/" (code) "/api/v1/recover" } {
+                                            input type="hidden" name="binding"
+                                                value=(binding.id);
+                                            button type="submit" { "Recover" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
         )
@@ -383,6 +585,39 @@ fn chooser(state: &AppState, code: &CodeId) -> impl IntoResponse {
             })).collect::<Vec<_>>(),
         })),
     )
+    .into_response()
+}
+
+/// One line saying what a released binding was, without opening it.
+fn describe_line(
+    handler: &str,
+    summary: &serde_json::Value,
+    released_at: Option<DateTime<Utc>>,
+) -> String {
+    let mut parts = vec![handler.to_owned()];
+
+    if let Some(total) = summary.get("total").and_then(serde_json::Value::as_u64) {
+        parts.push(match total {
+            1 => "1 photo".to_owned(),
+            n => format!("{n} photos"),
+        });
+    }
+    if let Some(url) = summary.get("url").and_then(serde_json::Value::as_str) {
+        parts.push(format!("→ {url}"));
+    } else if let Some(code) = summary.get("code").and_then(serde_json::Value::as_str) {
+        parts.push(format!("→ {}", display_code(code)));
+    }
+    if let Some(at) = released_at {
+        parts.push(format!("released {}", at.format("%-d %b %Y")));
+    }
+
+    parts.join(" · ")
+}
+
+fn display_code(raw: &str) -> String {
+    CodeId::parse(raw)
+        .map(|code| code.grouped())
+        .unwrap_or_else(|_| raw.to_owned())
 }
 
 #[derive(Deserialize)]
