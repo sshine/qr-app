@@ -8,6 +8,7 @@ pub mod assets;
 pub mod cli;
 pub mod error;
 pub mod health;
+pub mod overview;
 pub mod sheet;
 pub mod shutdown;
 

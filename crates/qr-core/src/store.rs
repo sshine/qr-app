@@ -202,7 +202,7 @@ pub async fn code<'e, E: PgExecutor<'e>>(ex: E, id: &CodeId) -> Result<Option<Co
     let row = sqlx::query!(
         r#"
         SELECT id, sheet_id, secret_hash, intended_handler, intended_config,
-               created_at, first_seen_at, revoked_at
+               created_at, first_seen_at, revoked_at, deleted_at
         FROM codes WHERE id = $1
         "#,
         id.as_str(),
@@ -224,6 +224,7 @@ pub async fn code<'e, E: PgExecutor<'e>>(ex: E, id: &CodeId) -> Result<Option<Co
             created_at: row.created_at,
             first_seen_at: row.first_seen_at,
             revoked_at: row.revoked_at,
+            deleted_at: row.deleted_at,
         })
     })
     .transpose()
@@ -276,6 +277,36 @@ pub async fn revoke_code<'e, E: PgExecutor<'e>>(ex: E, id: &CodeId) -> Result<()
     .execute(ex)
     .await?;
     Ok(())
+}
+
+/// Hides a label from the overview. `false` means it was already hidden.
+pub async fn soft_delete_code<'e, E: PgExecutor<'e>>(ex: E, id: &CodeId) -> Result<bool> {
+    let row = sqlx::query!(
+        r#"
+        UPDATE codes SET deleted_at = now()
+        WHERE id = $1 AND deleted_at IS NULL
+        RETURNING id
+        "#,
+        id.as_str(),
+    )
+    .fetch_optional(ex)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// Shows a hidden label again. `false` means it was not hidden.
+pub async fn restore_code<'e, E: PgExecutor<'e>>(ex: E, id: &CodeId) -> Result<bool> {
+    let row = sqlx::query!(
+        r#"
+        UPDATE codes SET deleted_at = NULL
+        WHERE id = $1 AND deleted_at IS NOT NULL
+        RETURNING id
+        "#,
+        id.as_str(),
+    )
+    .fetch_optional(ex)
+    .await?;
+    Ok(row.is_some())
 }
 
 /// The binding a code currently has, if any.

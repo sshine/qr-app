@@ -155,6 +155,18 @@ pub async fn get<'e, E: PgExecutor<'e>>(
     Ok(row.map(|row| photo_from_row!(row)))
 }
 
+/// The thumbnail for a photo by its own id, without a binding in hand.
+///
+/// The overview is public and its cards point at photos across every label, so it cannot
+/// use the per-code media route. The id is a UUIDv7 and the bytes behind it are already
+/// served as `public` there; this is the same read, not a wider one.
+pub async fn thumb_key<'e, E: PgExecutor<'e>>(ex: E, id: Uuid) -> Result<Option<String>> {
+    let row = sqlx::query!("SELECT thumb_key FROM photo_items WHERE id = $1", id,)
+        .fetch_optional(ex)
+        .await?;
+    Ok(row.map(|row| row.thumb_key))
+}
+
 /// Soft, because the only confirmation a delete gets is the undo that follows it.
 pub async fn soft_delete<'e, E: PgExecutor<'e>>(ex: E, binding_id: Uuid, id: Uuid) -> Result<bool> {
     let row = sqlx::query!(

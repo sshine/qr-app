@@ -87,6 +87,7 @@ tracing-subscriber = { workspace = true, features = [
   "fmt",
   "std",
 ] }
+url = { workspace = true, features = ["std"] }
 uuid = { workspace = true, features = ["serde", "std", "v7"] }
 
 [dev-dependencies]

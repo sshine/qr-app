@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT thumb_key FROM photo_items WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thumb_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "photo_items",
+            "name": "thumb_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2e803011648a4294a9f0096783a70b557888f80ac927ff5f138064e01f2d61d2"
+}

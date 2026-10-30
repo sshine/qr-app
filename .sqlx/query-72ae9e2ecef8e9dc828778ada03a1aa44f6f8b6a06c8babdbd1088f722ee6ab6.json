@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT binding_id, target_code_id\n            FROM code_links\n            WHERE binding_id = ANY($1)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "binding_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "code_links",
+            "name": "binding_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target_code_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "code_links",
+            "name": "target_code_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "72ae9e2ecef8e9dc828778ada03a1aa44f6f8b6a06c8babdbd1088f722ee6ab6"
+}

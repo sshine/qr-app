@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT ON (binding_id) binding_id, id, taken_at,\n                   count(*) OVER (PARTITION BY binding_id) AS \"total!\"\n            FROM photo_items\n            WHERE deleted_at IS NULL AND binding_id = ANY($1)\n            ORDER BY binding_id, id DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "binding_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "photo_items",
+            "name": "binding_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "photo_items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "taken_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "photo_items",
+            "name": "taken_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "4d640a88444d5e916ebbdb829c4420e46d7e8af6047147031a7992e02d8d08d0"
+}

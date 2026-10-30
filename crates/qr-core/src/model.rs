@@ -34,6 +34,8 @@ pub struct Code {
     pub created_at: DateTime<Utc>,
     pub first_seen_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// Hidden from the overview. The sticker still scans and still opens what it holds.
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Code {
@@ -137,6 +139,8 @@ pub enum EventKind {
     CodeReleased,
     CodeRecovered,
     CodeRevoked,
+    CodeDeleted,
+    CodeRestored,
     AuthFailed,
     PhotoAdded,
     PhotoDeleted,
@@ -159,6 +163,8 @@ impl EventKind {
             Self::CodeReleased => "code.released",
             Self::CodeRecovered => "code.recovered",
             Self::CodeRevoked => "code.revoked",
+            Self::CodeDeleted => "code.deleted",
+            Self::CodeRestored => "code.restored",
             Self::AuthFailed => "auth.failed",
             Self::PhotoAdded => "photo.added",
             Self::PhotoDeleted => "photo.deleted",
@@ -193,6 +199,8 @@ mod tests {
             EventKind::CodeReleased,
             EventKind::CodeRecovered,
             EventKind::CodeRevoked,
+            EventKind::CodeDeleted,
+            EventKind::CodeRestored,
             EventKind::AuthFailed,
             EventKind::PhotoAdded,
             EventKind::PhotoDeleted,

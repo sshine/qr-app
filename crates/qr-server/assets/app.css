@@ -422,6 +422,269 @@ input[type="text"] {
   white-space: nowrap;
 }
 
+/* The overview of every label. A phone reads it as a list of rows; a desktop browser
+ * gets a gallery of boxes proportioned like the sticker itself, with the margins a
+ * full-width window needs so the grid does not run under the edges. */
+main.overview {
+  max-width: none;
+  padding: 1rem;
+}
+
+.overview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem var(--gap);
+}
+
+.overview-head .hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.filters {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.filter-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.filter-search label {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+
+.filter-search .clear {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.filter-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.filter-group legend,
+.show-deleted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.filter-chip input,
+.show-deleted input {
+  margin: 0;
+}
+
+.show-deleted {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.label-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.label-card {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: var(--gap);
+  min-width: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 96%, var(--line));
+}
+
+.label-card.deleted {
+  opacity: 0.6;
+}
+
+.thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  min-height: 5rem;
+  overflow: hidden;
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--line);
+  color: var(--muted);
+}
+
+.thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb .glyph {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.thumb .placeholder-word {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.photo-count {
+  position: absolute;
+  right: 0.3rem;
+  bottom: 0.3rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 65%);
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+.card-text {
+  min-width: 0;
+}
+
+.card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.card-top h2 {
+  display: -webkit-box;
+  min-width: 0;
+  max-height: 2.5em;
+  margin: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.card-text .code-id {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 0.8rem;
+}
+
+.meta,
+.coords,
+.detail {
+  margin: 0.15rem 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.coords {
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  overflow: hidden;
+  color: var(--fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-tags a {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.card-actions {
+  margin-top: 0.4rem;
+}
+
+.card-actions button {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+@media (min-width: 60rem) {
+  main.overview {
+    padding: 2rem 3rem 4rem;
+  }
+
+  .label-grid {
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: 1.25rem;
+  }
+
+  /* The box is the sticker's own proportion, with the photo occupying the side the
+   * symbol would. Metadata takes the blank half, which is what a label has. */
+  .label-card {
+    aspect-ratio: 63.5 / 38.1;
+    grid-template-columns: 55% 1fr;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .label-card .thumb {
+    height: 100%;
+    min-height: 0;
+    border-radius: 0;
+  }
+
+  .label-card .card-text {
+    padding: 0.7rem 0.8rem;
+    overflow: hidden;
+  }
+}
+
 /* Tags on the bar and in the picker. A tag is a word a box can carry, so it is shown as
  * a pill rather than as another line of prose. */
 .code-controls .tagged.tags {

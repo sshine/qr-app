@@ -23,7 +23,7 @@ use tower_http::{
     timeout::TimeoutLayer, trace::TraceLayer,
 };
 
-use crate::{assets, cli::ServeArgs, sheet};
+use crate::{assets, cli::ServeArgs, overview, sheet};
 
 /// No inline anything, and no 'unsafe-eval' — which is the whole reason Alpine's CSP
 /// build is the one vendored. `blob:` is what lets a photo appear in the grid before
@@ -44,8 +44,9 @@ pub fn router(state: AppState, sheets: sheet::routes::SheetState) -> Router {
         .with_state(state.clone());
 
     Router::new()
-        .merge(qr_handler::mount(state))
+        .merge(qr_handler::mount(state.clone()))
         .merge(pages)
+        .merge(overview::router(state))
         .merge(sheet::routes::router(sheets))
         .merge(assets::router())
         .fallback(not_found)
