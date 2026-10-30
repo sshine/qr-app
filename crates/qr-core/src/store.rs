@@ -12,7 +12,9 @@ use uuid::Uuid;
 
 use crate::{
     CodeId, Error, Result, Secret, SecretHash, decoy_hash,
-    model::{Binding, BlobRecord, Code, CodeLink, EventKind, MintedCode, Sheet},
+    model::{
+        Binding, BlobRecord, Code, CodeLink, EventKind, Location, MintedCode, NewLocation, Sheet,
+    },
 };
 
 /// How many times minting retries a colliding id before giving up.
@@ -513,6 +515,119 @@ pub async fn link<'e, E: PgExecutor<'e>>(ex: E, binding_id: Uuid) -> Result<Opti
         })
     })
     .transpose()
+}
+
+/// The shared catalog, alphabetically.
+pub async fn locations<'e, E: PgExecutor<'e>>(ex: E) -> Result<Vec<Location>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, name, address, lat, lon, created_at
+        FROM locations
+        ORDER BY lower(name), created_at
+        "#,
+    )
+    .fetch_all(ex)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Location {
+            id: row.id,
+            name: row.name,
+            address: row.address,
+            lat: row.lat,
+            lon: row.lon,
+            created_at: row.created_at,
+        })
+        .collect())
+}
+
+pub async fn location<'e, E: PgExecutor<'e>>(ex: E, id: Uuid) -> Result<Option<Location>> {
+    let row = sqlx::query!(
+        "SELECT id, name, address, lat, lon, created_at FROM locations WHERE id = $1",
+        id,
+    )
+    .fetch_optional(ex)
+    .await?;
+
+    Ok(row.map(|row| Location {
+        id: row.id,
+        name: row.name,
+        address: row.address,
+        lat: row.lat,
+        lon: row.lon,
+        created_at: row.created_at,
+    }))
+}
+
+/// Adds a place to the catalog.
+pub async fn insert_location<'e, E: PgExecutor<'e>>(ex: E, new: NewLocation) -> Result<Location> {
+    let row = sqlx::query!(
+        r#"
+        INSERT INTO locations (id, name, address, lat, lon)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, address, lat, lon, created_at
+        "#,
+        Uuid::now_v7(),
+        new.name,
+        new.address,
+        new.lat,
+        new.lon,
+    )
+    .fetch_one(ex)
+    .await?;
+
+    Ok(Location {
+        id: row.id,
+        name: row.name,
+        address: row.address,
+        lat: row.lat,
+        lon: row.lon,
+        created_at: row.created_at,
+    })
+}
+
+/// Where this code is, if it has been tagged.
+pub async fn code_location<'e, E: PgExecutor<'e>>(
+    ex: E,
+    code_id: &CodeId,
+) -> Result<Option<Location>> {
+    let row = sqlx::query!(
+        r#"
+        SELECT l.id, l.name, l.address, l.lat, l.lon, l.created_at
+        FROM codes c
+        JOIN locations l ON l.id = c.location_id
+        WHERE c.id = $1
+        "#,
+        code_id.as_str(),
+    )
+    .fetch_optional(ex)
+    .await?;
+
+    Ok(row.map(|row| Location {
+        id: row.id,
+        name: row.name,
+        address: row.address,
+        lat: row.lat,
+        lon: row.lon,
+        created_at: row.created_at,
+    }))
+}
+
+/// Tags the code, or clears the tag with `None`.
+pub async fn set_code_location<'e, E: PgExecutor<'e>>(
+    ex: E,
+    code_id: &CodeId,
+    location: Option<Uuid>,
+) -> Result<()> {
+    sqlx::query!(
+        "UPDATE codes SET location_id = $2 WHERE id = $1",
+        code_id.as_str(),
+        location,
+    )
+    .execute(ex)
+    .await?;
+    Ok(())
 }
 
 /// Records a blob's metadata. Idempotent, because the key is the content.

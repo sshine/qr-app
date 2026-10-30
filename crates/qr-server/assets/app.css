@@ -310,6 +310,50 @@ input[type="text"],
   border-color: var(--accent);
 }
 
+.code-controls .tagged {
+  margin-left: -0.25rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Where a sticker is. */
+.location section {
+  margin-top: 1.5rem;
+}
+
+.location h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.location .locate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap);
+  margin-bottom: 0.75rem;
+}
+
+.location .current-location strong {
+  font-weight: 600;
+}
+
+.location .untag {
+  margin-top: 2rem;
+}
+
+select {
+  display: block;
+  width: 100%;
+  font: inherit;
+  margin-top: 0.25rem;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

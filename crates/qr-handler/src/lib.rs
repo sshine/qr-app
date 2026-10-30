@@ -42,9 +42,16 @@ pub fn mount(state: AppState) -> Router {
 
     let mut guarded = Router::new()
         .route("/c/{code}/manage", get(routes::manage))
+        .route("/c/{code}/location", get(routes::location_page))
         .route("/c/{code}/api/v1/state", get(routes::code_state))
         .route("/c/{code}/api/v1/claim", post(routes::claim))
         .route("/c/{code}/api/v1/recover", post(routes::recover))
+        .route("/c/{code}/api/v1/location", post(routes::tag_location))
+        .route(
+            "/c/{code}/api/v1/location/clear",
+            post(routes::clear_location),
+        )
+        .route("/c/{code}/api/v1/locations", get(routes::list_locations))
         .route("/c/{code}/api/v1/release", post(routes::release));
 
     for handler in state.registry().iter() {

@@ -129,6 +129,39 @@
       },
     }));
 
+    // The device's own position, for tagging a box where it stands. The form still
+    // works without this: picking an existing place needs no coordinates at all.
+    Alpine.data("locationTag", () => ({
+      lat: "",
+      lon: "",
+      status: "",
+      noCoords: true,
+
+      locate() {
+        if (!navigator.geolocation) {
+          this.status = "This browser has no location support.";
+          return;
+        }
+
+        this.status = "Asking this device…";
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            this.lat = position.coords.latitude.toFixed(6);
+            this.lon = position.coords.longitude.toFixed(6);
+            this.noCoords = false;
+            this.status = `Got it: ${this.lat}, ${this.lon}.`;
+          },
+          (error) => {
+            this.status =
+              error.code === error.PERMISSION_DENIED
+                ? "Location permission was refused."
+                : "The device did not give a position.";
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+        );
+      },
+    }));
+
     Alpine.data("album", () => ({
       photos: boot.state?.photos ?? [],
       pending: [],

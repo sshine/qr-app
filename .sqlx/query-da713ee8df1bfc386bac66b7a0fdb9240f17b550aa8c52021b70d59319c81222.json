@@ -1,0 +1,92 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO locations (id, name, address, lat, lon)\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING id, name, address, lat, lon, created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "locations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "locations",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "locations",
+            "name": "address"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "lat",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "locations",
+            "name": "lat"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "lon",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "locations",
+            "name": "lon"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "locations",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "da713ee8df1bfc386bac66b7a0fdb9240f17b550aa8c52021b70d59319c81222"
+}

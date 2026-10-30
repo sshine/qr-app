@@ -10,7 +10,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use maud::html;
-use qr_core::{Binding, CodeId, Secret, model::EventKind, store};
+use qr_core::{Binding, CodeId, Location, NewLocation, Secret, model::EventKind, store};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -129,13 +129,17 @@ fn looped(from: &CodeId) -> Response {
 /// them back. Scripted visitors get the dialog; `<noscript>` gets the same form and the
 /// same sentence, because a control that only works with script would be a second-class
 /// way to lose a box.
-fn controls(code: &CodeId, managing: bool) -> maud::Markup {
+fn controls(code: &CodeId, managing: bool, location: Option<&Location>) -> maud::Markup {
     html! {
         nav class="code-controls" x-data="codeControls" aria-label="This code" {
             @if managing {
                 a class="control" href={ "/c/" (code) } { "Open" }
             } @else {
                 a class="control" href={ "/c/" (code) "/manage" } { "Manage" }
+            }
+            a class="control" href={ "/c/" (code) "/location" } { "Location" }
+            @if let Some(location) = location {
+                span class="tagged" { (location.name) }
             }
             button type="button" class="control" x-on:click="openRelease" { "Release…" }
 
@@ -189,6 +193,9 @@ pub async fn manage(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> 
                 .describe(&ctx, &binding)
                 .await
                 .unwrap_or_else(|_| json!({}));
+            let location = store::code_location(state.store().pool(), &access.code.id)
+                .await
+                .unwrap_or(None);
             shell::render(
                 Page::new(
                     binding
@@ -196,7 +203,7 @@ pub async fn manage(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> 
                         .clone()
                         .unwrap_or_else(|| handler.name().to_owned()),
                     html! {
-                        (controls(&access.code.id, true))
+                        (controls(&access.code.id, true, location.as_ref()))
                         (body)
                     },
                 )
@@ -260,6 +267,244 @@ pub async fn recover(
 
     match result {
         Ok(()) => see_other(&format!("/c/{}", access.code.id)),
+        Err(error) => store_response(&error),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct LocationBody {
+    #[serde(default)]
+    pub location: Option<Uuid>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub address: Option<String>,
+    #[serde(default)]
+    pub lat: Option<f64>,
+    #[serde(default)]
+    pub lon: Option<f64>,
+}
+
+/// `GET /c/{code}/location` — where this sticker is, and how to say so.
+///
+/// A page rather than a dialog: the catalog has to be rendered somewhere, and a native
+/// `<select>` beats a dropdown built from script. The device-location half needs script;
+/// picking an existing place does not.
+pub async fn location_page(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
+    if access.binding.is_none() {
+        return see_other(&format!("/c/{}", access.code.id));
+    }
+
+    let current = store::code_location(state.store().pool(), &access.code.id)
+        .await
+        .unwrap_or(None);
+    let catalog = store::locations(state.store().pool())
+        .await
+        .unwrap_or_default();
+    let code = &access.code.id;
+
+    shell::render(
+        Page::new(
+            "Location",
+            html! {
+                (controls(code, false, current.as_ref()))
+                main class="location" {
+                    h1 { "Where is this code?" }
+                    p class="code-id" { (code.grouped()) }
+
+                    @match &current {
+                        Some(place) => p class="current-location" {
+                            "Tagged as " strong { (place.name) }
+                            @if let Some(address) = &place.address {
+                                " — " (address)
+                            }
+                        },
+                        None => p class="empty" { "Not tagged yet." },
+                    }
+
+                    section class="place-new" {
+                        h2 { "Use this device's location" }
+                        form method="post" action={ "/c/" (code) "/api/v1/location" }
+                            x-data="locationTag" {
+                            label {
+                                "Name"
+                                input name="name" required maxlength="80"
+                                    autocomplete="off" spellcheck="false"
+                                    placeholder="Loft, shelf 3";
+                            }
+                            label {
+                                "Address (optional)"
+                                input name="address" maxlength="200" autocomplete="off"
+                                    spellcheck="false";
+                            }
+                            input type="hidden" name="lat" x-model="lat";
+                            input type="hidden" name="lon" x-model="lon";
+
+                            div class="locate" {
+                                button type="button" x-on:click="locate" {
+                                    "Use my location"
+                                }
+                                span class="hint" x-text="status" {}
+                            }
+                            button type="submit" disabled x-bind:disabled="noCoords" {
+                                "Tag this place"
+                            }
+                            noscript {
+                                p class="hint" {
+                                    "Getting the device's position needs JavaScript. Pick an
+                                     existing place below instead."
+                                }
+                            }
+                        }
+                    }
+
+                    @if !catalog.is_empty() {
+                        section class="place-existing" {
+                            h2 { "Choose an existing place" }
+                            form method="post" action={ "/c/" (code) "/api/v1/location" } {
+                                label {
+                                    "Place"
+                                    select name="location" required {
+                                        @for place in &catalog {
+                                            option value=(place.id) {
+                                                (place.name)
+                                                @if let Some(address) = &place.address {
+                                                    " — " (address)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                button type="submit" { "Tag" }
+                            }
+                        }
+                    }
+
+                    @if current.is_some() {
+                        form class="untag" method="post"
+                            action={ "/c/" (code) "/api/v1/location/clear" } {
+                            button type="submit" { "Remove tag" }
+                        }
+                    }
+                }
+            },
+        )
+        .with_state(json!({ "code": code.as_str() })),
+    )
+    .into_response()
+}
+
+/// `POST /c/{code}/api/v1/location` — attach an existing place, or create one.
+pub async fn tag_location(
+    CodeCtx(access): CodeCtx,
+    State(state): State<AppState>,
+    Form(body): Form<LocationBody>,
+) -> Response {
+    let result = async {
+        let mut tx = state.store().begin().await?;
+
+        let place = match body.location {
+            Some(id) => store::location(&mut *tx, id)
+                .await?
+                .ok_or_else(|| qr_core::Error::Invalid("no such place".to_owned()))?,
+            None => {
+                let name = body.name.as_deref().map(str::trim).unwrap_or_default();
+                if name.is_empty() || name.chars().count() > 80 {
+                    return Err(qr_core::Error::Invalid(
+                        "a place needs a name of at most 80 characters".to_owned(),
+                    ));
+                }
+
+                let address = body
+                    .address
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|address| !address.is_empty());
+                if address.is_some_and(|address| address.chars().count() > 200) {
+                    return Err(qr_core::Error::Invalid(
+                        "that address is too long".to_owned(),
+                    ));
+                }
+
+                let (Some(lat), Some(lon)) = (body.lat, body.lon) else {
+                    return Err(qr_core::Error::Invalid(
+                        "a new place needs coordinates from this device".to_owned(),
+                    ));
+                };
+                if !lat.is_finite() || !(-90.0..=90.0).contains(&lat) {
+                    return Err(qr_core::Error::Invalid(
+                        "latitude must be between -90 and 90".to_owned(),
+                    ));
+                }
+                if !lon.is_finite() || !(-180.0..=180.0).contains(&lon) {
+                    return Err(qr_core::Error::Invalid(
+                        "longitude must be between -180 and 180".to_owned(),
+                    ));
+                }
+
+                store::insert_location(
+                    &mut *tx,
+                    NewLocation {
+                        name: name.to_owned(),
+                        address: address.map(str::to_owned),
+                        lat,
+                        lon,
+                    },
+                )
+                .await?
+            }
+        };
+
+        store::set_code_location(&mut *tx, &access.code.id, Some(place.id)).await?;
+        store::record_event(
+            &mut *tx,
+            EventKind::LocationTagged,
+            Some(&access.code.id),
+            access.binding.as_ref().map(|binding| binding.id),
+            &json!({ "location": place.id, "name": place.name }),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+
+    match result {
+        Ok(()) => see_other(&format!("/c/{}", access.code.id)),
+        Err(error) => store_response(&error),
+    }
+}
+
+/// `POST /c/{code}/api/v1/location/clear` — the sticker is no longer anywhere in
+/// particular.
+pub async fn clear_location(CodeCtx(access): CodeCtx, State(state): State<AppState>) -> Response {
+    let result = async {
+        let mut tx = state.store().begin().await?;
+        store::set_code_location(&mut *tx, &access.code.id, None).await?;
+        store::record_event(
+            &mut *tx,
+            EventKind::LocationTagged,
+            Some(&access.code.id),
+            access.binding.as_ref().map(|binding| binding.id),
+            &json!({ "cleared": true }),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+
+    match result {
+        Ok(()) => see_other(&format!("/c/{}", access.code.id)),
+        Err(error) => store_response(&error),
+    }
+}
+
+/// `GET /c/{code}/api/v1/locations` — the catalog, for a script that would rather pick
+/// from JSON than parse the page.
+pub async fn list_locations(State(state): State<AppState>) -> Response {
+    match store::locations(state.store().pool()).await {
+        Ok(locations) => Json(json!({ "locations": locations })).into_response(),
         Err(error) => store_response(&error),
     }
 }
@@ -331,6 +576,9 @@ pub async fn landing(
                 .describe(&ctx, &binding)
                 .await
                 .unwrap_or_else(|_| json!({}));
+            let location = store::code_location(state.store().pool(), &code_id)
+                .await
+                .unwrap_or(None);
             shell::render(
                 Page::new(
                     binding
@@ -338,7 +586,7 @@ pub async fn landing(
                         .clone()
                         .unwrap_or_else(|| handler.name().to_owned()),
                     html! {
-                        (controls(&code_id, false))
+                        (controls(&code_id, false, location.as_ref()))
                         (body)
                     },
                 )

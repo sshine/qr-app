@@ -72,6 +72,29 @@ pub struct CodeLink {
     pub secret: Secret,
 }
 
+/// A place a sticker can be said to be.
+///
+/// Shared between codes: the point of a catalog is that the second box in the loft is
+/// tagged by picking the loft, not by typing it again on a phone.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Location {
+    pub id: Uuid,
+    pub name: String,
+    pub address: Option<String>,
+    pub lat: f64,
+    pub lon: f64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A place as it is created, before it has an id.
+#[derive(Debug, Clone)]
+pub struct NewLocation {
+    pub name: String,
+    pub address: Option<String>,
+    pub lat: f64,
+    pub lon: f64,
+}
+
 /// A stored blob's metadata.
 #[derive(Debug, Clone)]
 pub struct BlobRecord {
@@ -109,6 +132,7 @@ pub enum EventKind {
     PhotoRestored,
     ForwardFollowed,
     ForwardRepointed,
+    LocationTagged,
     BlobCollected,
 }
 
@@ -128,6 +152,7 @@ impl EventKind {
             Self::PhotoRestored => "photo.restored",
             Self::ForwardFollowed => "forward.followed",
             Self::ForwardRepointed => "forward.repointed",
+            Self::LocationTagged => "location.tagged",
             Self::BlobCollected => "blob.collected",
         }
     }
@@ -159,6 +184,7 @@ mod tests {
             EventKind::PhotoRestored,
             EventKind::ForwardFollowed,
             EventKind::ForwardRepointed,
+            EventKind::LocationTagged,
             EventKind::BlobCollected,
         ] {
             let s = kind.as_str();
