@@ -340,7 +340,7 @@ mod tests {
             "--health-bind=0.0.0.0:9090",
             "--base-url=https://qr.shine.town",
             "--blob-root=/data",
-            "--code-id-len=10",
+            "--code-id-len=12",
             "--code-secret-len=16",
             "--qr-ec-level=Q",
             "--max-upload-bytes=26214400",

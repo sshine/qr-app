@@ -92,6 +92,62 @@ test("filters by a tag and reveals a deleted label only when asked", async ({
   await expect(card(page, kept)).not.toContainText("deleted");
 });
 
+test("a printed label is hidden until it is used", async ({ page }) => {
+  const code = codes()[27];
+
+  await page.goto("/kiksmiks");
+  await expect(card(page, code)).toHaveCount(0);
+
+  await album(page, code);
+  await page.goto("/kiksmiks");
+  await expect(card(page, code)).toBeVisible();
+});
+
+test("a card opens the label page, and title, tags and place feed the gallery", async ({
+  page,
+}) => {
+  const code = codes()[26];
+  const tagName = uniqueTag("Detail");
+  const placeName = uniqueTag("Shelf");
+  await album(page, code);
+
+  const place = await page.request.post(`/c/${code.id}/api/v1/location`, {
+    form: { name: placeName, lat: "55.7", lon: "12.5" },
+  });
+  expect(place.ok(), "the place was refused").toBeTruthy();
+
+  await page.goto("/kiksmiks");
+  const shown = card(page, code);
+  await shown.locator("h2 a").click();
+  await expect(page).toHaveURL(new RegExp(`/kiksmiks/${code.id}`));
+  await expect(page.getByRole("link", { name: "Open this label" })).toBeVisible();
+
+  await page
+    .getByLabel("Shown on the card instead of the handler's name")
+    .fill("Detail box");
+  await page.getByRole("button", { name: "Save title" }).click();
+  await expect(page.getByRole("heading", { name: "Detail box" })).toBeVisible();
+
+  await page.getByLabel("New tag").fill(tagName);
+  await page.getByRole("button", { name: "Create and add" }).click();
+  await expect(page.locator(".tag-list")).toContainText(tagName);
+
+  await page.getByLabel("Existing place").selectOption({ label: placeName });
+  await page.getByRole("button", { name: "Set place" }).click();
+  await expect(page.getByText(`Tagged as ${placeName}`)).toBeVisible();
+
+  for (const query of ["Detail box", tagName, placeName]) {
+    await page.goto(`/kiksmiks?q=${encodeURIComponent(query)}`);
+    await expect(card(page, code), `search ${query}`).toBeVisible();
+  }
+
+  await page.goto(`/kiksmiks/${code.id}`);
+  await page.getByRole("button", { name: "Release" }).click();
+  await expect(page.getByRole("heading", { name: "Previous uses" })).toBeVisible();
+  await page.getByRole("button", { name: "Recover" }).click();
+  await expect(page.getByRole("link", { name: "Open this label" })).toBeVisible();
+});
+
 test("a photo label shows its top photo and the extra ones as a count", async ({
   page,
 }) => {

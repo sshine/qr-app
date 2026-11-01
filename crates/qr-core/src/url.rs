@@ -110,9 +110,9 @@ mod tests {
         let base = base();
         let id = CodeId::generate(DEFAULT_CODE_ID_LEN).expect("id");
         let secret = Secret::generate(DEFAULT_SECRET_LEN).expect("secret");
-        // 21 for the host and scheme, 3 for /C/, 10 for the id, 1 for #, 16 for the
+        // 21 for the host and scheme, 3 for /C/, 12 for the id, 1 for #, 16 for the
         // secret. qr-sheet pins what that encodes to.
-        assert_eq!(base.redeem_url(&id, &secret).len(), 51);
+        assert_eq!(base.redeem_url(&id, &secret).len(), 53);
     }
 
     #[test]

@@ -17,6 +17,9 @@ pub enum Error {
     #[error("a {what} contains a character outside the Crockford alphabet")]
     BadCharacter { what: &'static str },
 
+    #[error("a {what} does not pass its check characters")]
+    BadChecksum { what: &'static str },
+
     #[error("{0}")]
     Invalid(String),
 
@@ -63,7 +66,10 @@ impl Error {
     pub fn is_invalid(&self) -> bool {
         matches!(
             self,
-            Self::BadLength { .. } | Self::BadCharacter { .. } | Self::Invalid(_)
+            Self::BadLength { .. }
+                | Self::BadCharacter { .. }
+                | Self::BadChecksum { .. }
+                | Self::Invalid(_)
         )
     }
 }

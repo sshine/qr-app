@@ -249,6 +249,162 @@ async fn the_overview_filters_by_tag_place_and_text() {
 
 #[tokio::test]
 #[ignore = "needs a database"]
+async fn a_printed_label_is_hidden_until_it_is_used() {
+    let db = TestDb::create().await.expect("test database");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let router = support::router(&db, &dir).await;
+    let codes = support::mint(&db, 1).await;
+    let code = &codes[0];
+    let shown = grouped(&code.id);
+
+    let body = page(&router, "/kiksmiks").await;
+    assert!(
+        !body.contains(&shown),
+        "a code that was only printed is listed as a label:\n{body}"
+    );
+
+    album(&router, code).await;
+    let body = page(&router, "/kiksmiks").await;
+    assert!(
+        body.contains(&shown),
+        "a used label disappeared from the gallery:\n{body}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs a database"]
+async fn a_label_page_edits_the_title_tags_and_place_the_gallery_searches() {
+    let db = TestDb::create().await.expect("test database");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let router = support::router(&db, &dir).await;
+    let codes = support::mint(&db, 1).await;
+    let code = &codes[0];
+    album(&router, code).await;
+
+    let body = page(&router, &format!("/kiksmiks/{}", code.id)).await;
+    for expected in ["Title", "Tags", "Place", "Open this label"] {
+        assert!(
+            body.contains(expected),
+            "the label page is missing {expected}:\n{body}"
+        );
+    }
+
+    let binding: uuid::Uuid = sqlx::query_scalar("SELECT id FROM bindings WHERE code_id = $1")
+        .bind(code.id.as_str())
+        .fetch_one(db.pool())
+        .await
+        .expect("binding");
+
+    let response = post(
+        &router,
+        &format!("/kiksmiks/{}/title", code.id),
+        &format!("binding={binding}&title=Detail+box&back="),
+    )
+    .await;
+    support::assert_status(&response, StatusCode::SEE_OTHER);
+
+    let response = post(
+        &router,
+        &format!("/kiksmiks/{}/tags", code.id),
+        "name=Detail+loft&back=",
+    )
+    .await;
+    support::assert_status(&response, StatusCode::SEE_OTHER);
+
+    let response = post(
+        &router,
+        &format!("/kiksmiks/{}/place", code.id),
+        "name=Detail+shelf&lat=55.7&lon=12.5&back=",
+    )
+    .await;
+    support::assert_status(&response, StatusCode::SEE_OTHER);
+
+    let shown = grouped(&code.id);
+    for uri in [
+        "/kiksmiks?q=Detail+box".to_owned(),
+        "/kiksmiks?q=Detail+loft".to_owned(),
+        "/kiksmiks?q=Detail+shelf".to_owned(),
+    ] {
+        let body = page(&router, &uri).await;
+        assert!(
+            body.contains(&shown),
+            "search {uri} lost the label:\n{body}"
+        );
+    }
+
+    let tag: String = sqlx::query_scalar("SELECT id::text FROM tags WHERE name = 'Detail loft'")
+        .fetch_one(db.pool())
+        .await
+        .expect("tag");
+    let body = page(&router, &format!("/kiksmiks?tag_{tag}=1")).await;
+    assert!(
+        body.contains(&shown),
+        "the tag filter lost the label:\n{body}"
+    );
+
+    let place: String =
+        sqlx::query_scalar("SELECT id::text FROM locations WHERE name = 'Detail shelf'")
+            .fetch_one(db.pool())
+            .await
+            .expect("place");
+    let body = page(&router, &format!("/kiksmiks?loc_{place}=1")).await;
+    assert!(
+        body.contains(&shown),
+        "the place filter lost the label:\n{body}"
+    );
+
+    // Release keeps the card and its history, and the page offers it back.
+    let response = post(&router, &format!("/kiksmiks/{}/release", code.id), "back=").await;
+    support::assert_status(&response, StatusCode::SEE_OTHER);
+    let body = page(&router, &format!("/kiksmiks/{}", code.id)).await;
+    assert!(
+        body.contains("Previous uses") && body.contains("Recover"),
+        "a released label did not offer its history back:\n{body}"
+    );
+
+    let response = post(
+        &router,
+        &format!("/kiksmiks/{}/recover", code.id),
+        &format!("binding={binding}&back="),
+    )
+    .await;
+    support::assert_status(&response, StatusCode::SEE_OTHER);
+    let body = page(&router, &format!("/kiksmiks/{}", code.id)).await;
+    assert!(
+        body.contains("Open this label"),
+        "recovery did not reactivate"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs a database"]
+async fn an_unchecksummed_code_cannot_reach_the_gallery_or_its_routes() {
+    let db = TestDb::create().await.expect("test database");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let router = support::router(&db, &dir).await;
+
+    // A row minted before the cut-over. The migration deletes these in production;
+    // inserting one here proves the routes refuse it even if a database still has it.
+    sqlx::query("INSERT INTO codes (id, secret_hash) VALUES ('ABC12345', $1)")
+        .bind(&[0u8; 32][..])
+        .execute(db.pool())
+        .await
+        .expect("legacy code");
+
+    let response = support::get(&router, "/kiksmiks/ABC12345", None).await;
+    support::assert_status(&response, StatusCode::NOT_FOUND);
+
+    let response = support::get(
+        &router,
+        "/c/ABC12345/api/v1/state",
+        Some("qc_ABC12345=".to_owned() + "0123456789ABCDEF"),
+    )
+    .await;
+    support::assert_status(&response, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+#[ignore = "needs a database"]
 async fn a_photo_label_shows_its_top_photo_and_the_rest_as_a_count() {
     let db = TestDb::create().await.expect("test database");
     let dir = tempfile::tempdir().expect("tempdir");

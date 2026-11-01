@@ -30,7 +30,7 @@ struct LinkConfig {
 
 impl LinkConfig {
     fn parse(self) -> Result<(CodeId, Secret), HandlerError> {
-        let code = CodeId::parse(&self.code)
+        let code = CodeId::parse_checksummed(&self.code)
             .map_err(|e| HandlerError::Rejected(format!("that is not a code: {e}")))?;
         let secret = Secret::parse(&self.secret)
             .map_err(|e| HandlerError::Rejected(format!("that is not a secret: {e}")))?;

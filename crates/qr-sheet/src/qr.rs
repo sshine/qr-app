@@ -114,7 +114,10 @@ impl Budget {
 ///
 /// A sample rather than an exhaustive search: every character of both the id and the
 /// secret is drawn from one alphabet that sits entirely inside QR's alphanumeric mode, so
-/// the encoded length does not depend on which characters were drawn.
+/// the encoded length does not depend on which characters were drawn. The one exception
+/// is a length that sits on a version boundary at the chosen error-correction level: a
+/// numeric run can then save enough bits to stay in the smaller version. The default
+/// level, Q, is not on such a boundary at the default lengths.
 pub fn budget(base: &BaseUrl, id_len: usize, secret_len: usize, ec: EcLevel) -> Result<Budget> {
     let id = CodeId::generate(id_len)?;
     let secret = Secret::generate(secret_len)?;
@@ -148,7 +151,7 @@ mod tests {
         // every mm-per-module figure there wrong.
         let b =
             budget(&base(), DEFAULT_CODE_ID_LEN, DEFAULT_SECRET_LEN, EcLevel::Q).expect("budget");
-        assert_eq!(b.url_len, 51);
+        assert_eq!(b.url_len, 53);
         assert_eq!(b.version, 4);
         assert_eq!(b.modules, 33);
     }
@@ -167,8 +170,8 @@ mod tests {
 
     #[test]
     fn the_id_length_is_free_across_the_whole_permitted_range() {
-        // This is why the default id is ten characters rather than six. A version holds
-        // a range of lengths, and at the default secret length every id the schema
+        // This is why the default id is twelve characters rather than six. A version
+        // holds a range of lengths, and at the default secret length every id the schema
         // allows lands inside one version, so the shorter id buys nothing and only
         // makes collisions likelier.
         let base = base();
@@ -179,7 +182,10 @@ mod tests {
     }
 
     #[test]
-    fn the_error_correction_level_is_the_only_lever_on_symbol_size() {
+    fn the_error_correction_level_sets_the_symbol_size() {
+        // L, Q and H are stable at the default URL length. M sits on the version-3/4
+        // boundary, where a numeric run in the random id or secret can save enough bits
+        // to stay at 29 modules. The default is Q, so the printed size does not move.
         let base = base();
         let sizes: Vec<usize> = [EcLevel::L, EcLevel::M, EcLevel::Q, EcLevel::H]
             .into_iter()
@@ -189,7 +195,14 @@ mod tests {
                     .modules
             })
             .collect();
-        assert_eq!(sizes, vec![29, 29, 33, 37]);
+        assert_eq!(sizes[0], 29, "L changed size");
+        assert!(
+            sizes[1] == 29 || sizes[1] == 33,
+            "M produced {} modules, outside the version-3/4 boundary",
+            sizes[1]
+        );
+        assert_eq!(sizes[2], 33, "Q changed size");
+        assert_eq!(sizes[3], 37, "H changed size");
     }
 
     #[test]

@@ -19,8 +19,9 @@ use qr_core::{BlobStore, FsBlobStore, testing::TestDb};
 use qr_server::cli::{Args, Command, ServeArgs};
 use tower::ServiceExt as _;
 
-/// A code id in the shape a sheet prints, and a sticker encodes.
-const CODE: &str = "BFCADPV0QA";
+/// A code id in the shape a sheet prints, and a sticker encodes. The final two
+/// characters are its Luhn-mod-32 check, so the public routes accept it.
+const CODE: &str = "BFCADPV0QAQA";
 
 fn serve_args() -> ServeArgs {
     let argv = [

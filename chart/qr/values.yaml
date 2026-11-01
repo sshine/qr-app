@@ -62,7 +62,7 @@ migrations:
 # Code geometry. These decide how large a printed symbol comes out, so they are the knobs
 # a measuring session turns; see `qr-server budget`.
 codes:
-  idLength: 10
+  idLength: 12
   secretLength: 16
   errorCorrection: Q
 

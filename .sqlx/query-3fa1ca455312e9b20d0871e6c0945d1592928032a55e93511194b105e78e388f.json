@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT c.id AS code_id, c.created_at, c.revoked_at, c.deleted_at,\n               l.id AS \"location_id?\", l.name AS \"location_name?\",\n               l.address AS \"location_address?\", l.lat AS \"location_lat?\",\n               l.lon AS \"location_lon?\",\n               b.id AS \"binding_id?\", b.handler_id AS \"handler_id?\", b.title AS \"title?\",\n               b.released_at AS \"released_at?\",\n               (SELECT count(*) FROM events e\n                WHERE e.code_id = c.id AND e.kind = 'code.deleted') AS \"deletions!\"\n        FROM codes c\n        LEFT JOIN locations l ON l.id = c.location_id\n        LEFT JOIN LATERAL (\n            SELECT id, handler_id, title, created_at, released_at\n            FROM bindings\n            WHERE code_id = c.id\n            ORDER BY (released_at IS NULL) DESC, created_at DESC\n            LIMIT 1\n        ) b ON true\n        ORDER BY c.created_at DESC, c.id DESC\n        ",
+  "query": "\n        SELECT c.id AS code_id, c.created_at, c.revoked_at, c.deleted_at,\n               l.id AS \"location_id?\", l.name AS \"location_name?\",\n               l.address AS \"location_address?\", l.lat AS \"location_lat?\",\n               l.lon AS \"location_lon?\",\n               b.id AS \"binding_id?\", b.handler_id AS \"handler_id?\", b.title AS \"title?\",\n               b.released_at AS \"released_at?\",\n               (SELECT count(*) FROM events e\n                WHERE e.code_id = c.id AND e.kind = 'code.deleted') AS \"deletions!\"\n        FROM codes c\n        LEFT JOIN locations l ON l.id = c.location_id\n        LEFT JOIN LATERAL (\n            SELECT id, handler_id, title, created_at, released_at\n            FROM bindings\n            WHERE code_id = c.id\n            ORDER BY (released_at IS NULL) DESC, created_at DESC\n            LIMIT 1\n        ) b ON true\n        WHERE EXISTS (SELECT 1 FROM bindings used_b WHERE used_b.code_id = c.id)\n          AND ($1::text IS NULL OR c.id = $1)\n        ORDER BY c.created_at DESC, c.id DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -154,7 +154,9 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text"
+      ]
     },
     "nullable": [
       false,
@@ -173,5 +175,5 @@
       null
     ]
   },
-  "hash": "8dcd09bc3b8cb75e7c51e03de80ff557ccc8b862849e1f782dd8a64edcd6632b"
+  "hash": "3fa1ca455312e9b20d0871e6c0945d1592928032a55e93511194b105e78e388f"
 }

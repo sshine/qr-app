@@ -225,7 +225,10 @@ async fn go(
     State(state): State<AppState>,
     axum::extract::Form(form): axum::extract::Form<Go>,
 ) -> Response {
-    let (Ok(code), Ok(secret)) = (CodeId::parse(&form.code), Secret::parse(&form.secret)) else {
+    let (Ok(code), Ok(secret)) = (
+        CodeId::parse_checksummed(&form.code),
+        Secret::parse(&form.secret),
+    ) else {
         return go_refused();
     };
 

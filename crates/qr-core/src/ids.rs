@@ -23,16 +23,24 @@ const SECRET_CONTEXT: &str = "qr.shine.town 2026-10-07 capability secret";
 /// bounds, and the arrays are sized for the maximum so neither allocates.
 const MAX_LEN: usize = 24;
 
+/// How many trailing characters of a generated id are a check over the rest.
+///
+/// Two rather than one: a single Luhn-mod-32 character makes a random string look valid
+/// once in 32 tries, which is a poor gate in front of a database lookup. Two make it once
+/// in 1024, and the second check also covers the first, so a mistyped check character is
+/// caught as well as a mistyped data character.
+const CHECK_CHARS: usize = 2;
+
 pub const CODE_ID_LEN_RANGE: std::ops::RangeInclusive<usize> = 6..=12;
 pub const SECRET_LEN_RANGE: std::ops::RangeInclusive<usize> = 12..=24;
 
-/// The default id length, 50 bits.
+/// The default id length: ten data characters and two check characters.
 ///
 /// Measured rather than chosen: at the default secret length and error-correction level,
 /// every id from six to twelve characters encodes to the same symbol (see qr-sheet's
-/// budget sweep), so the extra characters are free and the only reason to spend fewer
+/// budget sweep), so the check characters are free and the only reason to spend fewer
 /// would be a shorter line of text under the QR.
-pub const DEFAULT_CODE_ID_LEN: usize = 10;
+pub const DEFAULT_CODE_ID_LEN: usize = 12;
 
 /// The default secret length, 80 bits. Uniform randomness, so there is nothing to
 /// brute-force offline and no reason for a password KDF over it.
@@ -96,6 +104,46 @@ fn normalize(raw: &str) -> Vec<u8> {
         .collect()
 }
 
+/// The two check characters for a sequence of alphabet values.
+///
+/// The first is a Luhn-mod-32 check over the data; the second is the same check over the
+/// data and the first check character. That is the same shape as the CPR number's mod-11
+/// digit, but over the base-32 alphabet the stickers already use. It catches every
+/// single-character substitution and most adjacent transpositions, and it needs no key,
+/// so a printed code stays valid for as long as the alphabet does.
+fn check_values(data: &[u8]) -> [u8; CHECK_CHARS] {
+    let mut values = [0u8; MAX_LEN];
+    values[..data.len()].copy_from_slice(data);
+    let first = luhn_mod_32(&values[..data.len()]);
+    values[data.len()] = first;
+    let second = luhn_mod_32(&values[..=data.len()]);
+    [first, second]
+}
+
+/// Luhn's checksum over an even-sized alphabet, returning the value that completes it.
+///
+/// Doubling is folded back into base 32 (`p / 32 + p % 32`), which is what makes the
+/// weighted sum cover the whole alphabet rather than overflow at 32.
+fn luhn_mod_32(values: &[u8]) -> u8 {
+    let mut factor = 2u32;
+    let mut sum = 0u32;
+    for &value in values.iter().rev() {
+        let product = factor * u32::from(value);
+        sum += product / 32 + product % 32;
+        factor = if factor == 2 { 1 } else { 2 };
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let check = ((32 - (sum % 32)) % 32) as u8;
+    check
+}
+
+/// The alphabet value of a canonical character. Every byte in a `CodeId` came out of
+/// `ALPHABET` or through `decode_char`, so `None` is unreachable; callers that do not
+/// have that guarantee use the `Option`.
+fn alphabet_value(c: u8) -> Option<u8> {
+    decode_char(c)
+}
+
 /// A code id: the characters printed under a QR, and the primary key of a sticker.
 ///
 /// Not secret. Knowing one buys nothing without the capability secret beside it.
@@ -106,7 +154,7 @@ pub struct CodeId {
 }
 
 impl CodeId {
-    /// Generates an id of `len` characters.
+    /// Generates an id of `len` characters, the last two of which are its checksum.
     pub fn generate(len: usize) -> Result<Self> {
         if !CODE_ID_LEN_RANGE.contains(&len) {
             return Err(Error::BadLength {
@@ -114,8 +162,18 @@ impl CodeId {
                 len,
             });
         }
+        let data_len = len - CHECK_CHARS;
         let mut chars = [0u8; MAX_LEN];
-        random_chars(&mut chars[..len])?;
+        random_chars(&mut chars[..data_len])?;
+
+        let mut values = [0u8; MAX_LEN];
+        for (slot, &c) in values.iter_mut().zip(chars[..data_len].iter()) {
+            *slot = alphabet_value(c).ok_or(Error::BadCharacter { what: "code id" })?;
+        }
+        let check = check_values(&values[..data_len]);
+        chars[data_len] = ALPHABET[usize::from(check[0])];
+        chars[data_len + 1] = ALPHABET[usize::from(check[1])];
+
         Ok(Self {
             chars,
             #[allow(clippy::cast_possible_truncation)]
@@ -124,6 +182,10 @@ impl CodeId {
     }
 
     /// Parses an id, applying Crockford's transcription rules.
+    ///
+    /// The checksum is not required here: a row minted before the checksum existed still
+    /// has to be readable by a migration and by the store. Public routes use
+    /// [`parse_checksummed`](Self::parse_checksummed) instead.
     pub fn parse(raw: &str) -> Result<Self> {
         let bytes = normalize(raw);
         if !CODE_ID_LEN_RANGE.contains(&bytes.len()) {
@@ -142,6 +204,35 @@ impl CodeId {
             #[allow(clippy::cast_possible_truncation)]
             len: bytes.len() as u8,
         })
+    }
+
+    /// Parses an id and refuses one whose data characters do not produce its check
+    /// characters. This is the gate every public route uses before a database lookup.
+    pub fn parse_checksummed(raw: &str) -> Result<Self> {
+        let id = Self::parse(raw)?;
+        if id.checksum_ok() {
+            Ok(id)
+        } else {
+            Err(Error::BadChecksum { what: "code id" })
+        }
+    }
+
+    /// True when the final two characters are the Luhn-mod-32 check for the rest.
+    pub fn checksum_ok(&self) -> bool {
+        if self.len() <= CHECK_CHARS {
+            return false;
+        }
+        let data_len = self.len() - CHECK_CHARS;
+        let mut values = [0u8; MAX_LEN];
+        for (slot, &c) in values.iter_mut().zip(self.chars[..data_len].iter()) {
+            let Some(value) = alphabet_value(c) else {
+                return false;
+            };
+            *slot = value;
+        }
+        let check = check_values(&values[..data_len]);
+        self.chars[data_len] == ALPHABET[usize::from(check[0])]
+            && self.chars[data_len + 1] == ALPHABET[usize::from(check[1])]
     }
 
     #[expect(
@@ -393,6 +484,84 @@ mod tests {
                 assert!(alphabet().contains(c), "{c} is not in the alphabet");
             }
         }
+    }
+
+    #[test]
+    fn every_generated_id_carries_a_valid_checksum() {
+        for len in CODE_ID_LEN_RANGE {
+            for _ in 0..64 {
+                let id = CodeId::generate(len).expect("generate");
+                assert!(id.checksum_ok(), "{id} does not pass its own checksum");
+                assert_eq!(
+                    CodeId::parse_checksummed(id.as_str()).expect("parse"),
+                    id,
+                    "a generated id was refused by the checksummed parser"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_check_characters_of_a_known_id_are_pinned() {
+        // Ten data characters produce two check characters. Changing the algorithm
+        // invalidates every printed sticker, so this is a deliberate speed bump.
+        let id = CodeId::parse("0123456789TA").expect("parse");
+        assert!(id.checksum_ok());
+        assert_eq!(&id.as_str()[10..], "TA");
+    }
+
+    #[test]
+    fn a_legacy_id_parses_but_does_not_checksum() {
+        // Rows minted before the cut-over still have to be readable by the store and by
+        // the migration; only the public routes refuse them.
+        let legacy = CodeId::parse("ABC12345").expect("parse");
+        assert!(!legacy.checksum_ok());
+        assert!(matches!(
+            CodeId::parse_checksummed("ABC12345"),
+            Err(Error::BadChecksum { .. })
+        ));
+    }
+
+    #[test]
+    fn every_single_character_substitution_is_caught() {
+        let canonical = CodeId::parse("0123456789TA").expect("parse");
+        for position in 0..canonical.len() {
+            for replacement in ALPHABET {
+                let mut chars = canonical.as_str().as_bytes().to_vec();
+                if chars[position] == *replacement {
+                    continue;
+                }
+                chars[position] = *replacement;
+                let candidate = String::from_utf8(chars).expect("alphabet is ascii");
+                let parsed = CodeId::parse(&candidate).expect("parse");
+                assert!(
+                    !parsed.checksum_ok(),
+                    "changing position {position} to {} still checksums",
+                    *replacement as char
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_random_checksum_is_refused_almost_every_time() {
+        // The property in the request: random strings should rarely be label codes.
+        // Two check characters should accept roughly one in 1024; the bound is loose
+        // because this is a probabilistic check, but it is far below every draw.
+        let mut accepted = 0;
+        let draws = 4096;
+        for _ in 0..draws {
+            let data = CodeId::generate(12).expect("generate");
+            let noise = Secret::generate(12).expect("noise");
+            let candidate = format!("{}{}", &data.as_str()[..10], &noise.expose()[..CHECK_CHARS]);
+            if CodeId::parse(&candidate).expect("parse").checksum_ok() {
+                accepted += 1;
+            }
+        }
+        assert!(
+            accepted < draws / 32,
+            "{accepted} of {draws} random checksums were accepted"
+        );
     }
 
     #[test]

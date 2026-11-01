@@ -839,7 +839,7 @@ pub async fn landing(
     Query(hop): Query<Hop>,
     headers: HeaderMap,
 ) -> Response {
-    let Ok(code_id) = CodeId::parse(&raw) else {
+    let Ok(code_id) = CodeId::parse_checksummed(&raw) else {
         return bootstrap(&raw);
     };
 
@@ -1009,7 +1009,7 @@ async fn bind(
 /// The secret is in the fragment, which a browser reapplies to the destination of a
 /// redirect that carries none of its own, so nothing is lost on the way.
 pub async fn shouted(Path(raw): Path<String>) -> Response {
-    let Ok(code) = CodeId::parse(&raw) else {
+    let Ok(code) = CodeId::parse_checksummed(&raw) else {
         // Nothing to normalise it to, and the typed form is the way back in.
         return bootstrap(&raw);
     };
@@ -1205,7 +1205,8 @@ pub async fn redeem(
     Path(raw): Path<String>,
     Json(body): Json<RedeemBody>,
 ) -> Response {
-    let (Ok(code_id), Ok(secret)) = (CodeId::parse(&raw), Secret::parse(&body.secret)) else {
+    let (Ok(code_id), Ok(secret)) = (CodeId::parse_checksummed(&raw), Secret::parse(&body.secret))
+    else {
         return refuse();
     };
 

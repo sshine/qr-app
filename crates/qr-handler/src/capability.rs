@@ -165,7 +165,7 @@ pub async fn require_capability(
     let Some(raw) = params.get("code") else {
         return refuse();
     };
-    let Ok(code_id) = CodeId::parse(raw) else {
+    let Ok(code_id) = CodeId::parse_checksummed(raw) else {
         return refuse();
     };
 
